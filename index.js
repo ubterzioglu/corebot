@@ -13,7 +13,16 @@ const PORT = process.env.PORT || 3000;
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY;
 
-const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+function getSupabaseClient() {
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+    console.warn("Supabase environment variables are missing. Database writes are disabled.");
+    return null;
+  }
+
+  return createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+}
+
+const supabase = getSupabaseClient();
 
 // --------------------------------------------------
 // HELPERS
@@ -36,6 +45,10 @@ async function sendWhatsAppMessage(to, body) {
 }
 
 async function logMessage(wa_id, message_text, reply_text) {
+  if (!supabase) {
+    return;
+  }
+
   const { error } = await supabase.from("wa_messages").insert({
     wa_id,
     message_text,
@@ -48,6 +61,10 @@ async function logMessage(wa_id, message_text, reply_text) {
 }
 
 async function createTask(wa_id, task) {
+  if (!supabase) {
+    return;
+  }
+
   const { error } = await supabase.from("wa_tasks").insert({
     wa_id,
     task,
@@ -106,6 +123,16 @@ function getTaskByIntent(intent, city) {
 }
 
 async function getOrCreateUser(wa_id) {
+  if (!supabase) {
+    return {
+      wa_id,
+      intent: null,
+      city: null,
+      role: null,
+      current_step: "ASK_INTENT"
+    };
+  }
+
   const { data, error } = await supabase
     .from("wa_users")
     .select("*")
@@ -139,6 +166,10 @@ async function getOrCreateUser(wa_id) {
 }
 
 async function updateUser(wa_id, updates) {
+  if (!supabase) {
+    return;
+  }
+
   const payload = {
     ...updates,
     updated_at: new Date().toISOString()
