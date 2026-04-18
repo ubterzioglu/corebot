@@ -15,9 +15,9 @@ const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY;
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-// -----------------------------
-// Helpers
-// -----------------------------
+// --------------------------------------------------
+// HELPERS
+// --------------------------------------------------
 async function sendWhatsAppMessage(to, body) {
   await axios.post(
     `https://graph.facebook.com/v19.0/${PHONE_NUMBER_ID}/messages`,
@@ -36,31 +36,31 @@ async function sendWhatsAppMessage(to, body) {
 }
 
 async function logMessage(wa_id, message_text, reply_text) {
-  const { error } = await supabase.from("whatsapp_messages").insert({
+  const { error } = await supabase.from("wa_messages").insert({
     wa_id,
     message_text,
     reply_text
   });
 
   if (error) {
-    console.error("Message log insert error:", error);
+    console.error("wa_messages insert error:", error);
   }
 }
 
 async function createTask(wa_id, task) {
-  const { error } = await supabase.from("tasks").insert({
+  const { error } = await supabase.from("wa_tasks").insert({
     wa_id,
     task,
     status: "pending"
   });
 
   if (error) {
-    console.error("Task insert error:", error);
+    console.error("wa_tasks insert error:", error);
   }
 }
 
 function normalizeIntent(text) {
-  const t = text.toLowerCase().trim();
+  const t = (text || "").toLowerCase().trim();
 
   if (t === "1" || t.includes("danışman")) return "advisor";
   if (t === "2" || t.includes("etkinlik")) return "events";
@@ -107,13 +107,13 @@ function getTaskByIntent(intent, city) {
 
 async function getOrCreateUser(wa_id) {
   const { data, error } = await supabase
-    .from("users")
+    .from("wa_users")
     .select("*")
     .eq("wa_id", wa_id)
     .maybeSingle();
 
   if (error) {
-    console.error("User fetch error:", error);
+    console.error("wa_users fetch error:", error);
     throw error;
   }
 
@@ -122,7 +122,7 @@ async function getOrCreateUser(wa_id) {
   }
 
   const { data: newUser, error: insertError } = await supabase
-    .from("users")
+    .from("wa_users")
     .insert({
       wa_id,
       current_step: "ASK_INTENT"
@@ -131,7 +131,7 @@ async function getOrCreateUser(wa_id) {
     .single();
 
   if (insertError) {
-    console.error("User insert error:", insertError);
+    console.error("wa_users insert error:", insertError);
     throw insertError;
   }
 
@@ -145,12 +145,12 @@ async function updateUser(wa_id, updates) {
   };
 
   const { error } = await supabase
-    .from("users")
+    .from("wa_users")
     .update(payload)
     .eq("wa_id", wa_id);
 
   if (error) {
-    console.error("User update error:", error);
+    console.error("wa_users update error:", error);
     throw error;
   }
 }
@@ -168,7 +168,6 @@ async function buildReply(user, incomingText) {
     });
 
     return (
-      "Sıfırlandı.\n\n" +
       "CorteQS’e hoş geldin 🚀\n\n" +
       "Ne yapmak istiyorsun?\n" +
       "1. Danışman bulmak\n" +
@@ -184,7 +183,8 @@ async function buildReply(user, incomingText) {
 
     if (!intent) {
       return (
-        "Lütfen aşağıdaki seçeneklerden birini yaz:\n" +
+        "CorteQS’e hoş geldin 🚀\n\n" +
+        "Ne yapmak istiyorsun?\n" +
         "1. Danışman bulmak\n" +
         "2. Etkinliklere katılmak\n" +
         "3. İşimi / hizmetimi büyütmek\n" +
@@ -211,38 +211,37 @@ async function buildReply(user, incomingText) {
     }
 
     const city = text;
+    const task = getTaskByIntent(user.intent, city);
 
     await updateUser(user.wa_id, {
       city,
       current_step: "DONE"
     });
 
-    const task = getTaskByIntent(user.intent, city);
     await createTask(user.wa_id, task);
 
     return (
       `Süper. Şehir: ${city}\n` +
       `Alan: ${getIntentLabel(user.intent)}\n\n` +
       `İlk görevin:\n${task}\n\n` +
-      "Profilini tamamlamak için yakında sana link göndereceğim.\n" +
       "Baştan başlamak için 'reset' yazabilirsin."
     );
   }
 
   if (user.current_step === "DONE") {
     return (
-      "Seni kaydettim ✅\n\n" +
-      "Yeni bir akış başlatmak istersen 'reset' yaz.\n" +
-      "Mevcut profilini güncellemek istersen yakında panel linki göndereceğim."
+      "Kaydını aldım ✅\n\n" +
+      "Baştan başlamak istersen 'reset' yaz.\n" +
+      "Yakında profil tamamlama linkini de göndereceğim."
     );
   }
 
   return "Bir şeyler karıştı. Baştan başlamak için 'reset' yaz.";
 }
 
-// -----------------------------
-// Webhook verification
-// -----------------------------
+// --------------------------------------------------
+// WEBHOOK VERIFICATION
+// --------------------------------------------------
 app.get("/webhook", (req, res) => {
   const mode = req.query["hub.mode"];
   const token = req.query["hub.verify_token"];
@@ -256,9 +255,9 @@ app.get("/webhook", (req, res) => {
   return res.sendStatus(403);
 });
 
-// -----------------------------
-// Incoming messages
-// -----------------------------
+// --------------------------------------------------
+// INCOMING MESSAGES
+// --------------------------------------------------
 app.post("/webhook", async (req, res) => {
   try {
     const body = req.body;
@@ -287,9 +286,9 @@ app.post("/webhook", async (req, res) => {
   }
 });
 
-// -----------------------------
-// Health check
-// -----------------------------
+// --------------------------------------------------
+// HEALTHCHECK
+// --------------------------------------------------
 app.get("/", (req, res) => {
   res.send("WhatsApp bot is running");
 });
