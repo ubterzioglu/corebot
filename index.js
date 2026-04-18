@@ -1,6 +1,10 @@
 const express = require("express");
 const axios = require("axios");
+const fs = require("fs");
+const path = require("path");
 const { createClient } = require("@supabase/supabase-js");
+
+loadEnvFiles();
 
 const app = express();
 app.use(express.json());
@@ -10,16 +14,77 @@ const ACCESS_TOKEN = process.env.ACCESS_TOKEN;
 const PHONE_NUMBER_ID = process.env.PHONE_NUMBER_ID;
 const PORT = process.env.PORT || 3000;
 
-const SUPABASE_URL = process.env.SUPABASE_URL;
-const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY;
+const SUPABASE_URL = firstDefined("SUPABASE_URL", "VITE_SUPABASE_URL");
+const SUPABASE_KEY = firstDefined(
+  "SUPABASE_SERVICE_ROLE_KEY",
+  "SUPABASE_ANON_KEY",
+  "VITE_SUPABASE_PUBLISHABLE_KEY"
+);
+
+function loadEnvFiles() {
+  const envFiles = [".env", ".secret"];
+
+  for (const fileName of envFiles) {
+    const filePath = path.join(__dirname, fileName);
+
+    if (!fs.existsSync(filePath)) {
+      continue;
+    }
+
+    const fileContents = fs.readFileSync(filePath, "utf8");
+    const lines = fileContents.split(/\r?\n/);
+
+    for (const rawLine of lines) {
+      const line = rawLine.trim();
+
+      if (!line || line.startsWith("#")) {
+        continue;
+      }
+
+      const separatorIndex = line.indexOf("=");
+
+      if (separatorIndex === -1) {
+        continue;
+      }
+
+      const key = line.slice(0, separatorIndex).trim();
+      let value = line.slice(separatorIndex + 1).trim();
+
+      if (!key || process.env[key] !== undefined) {
+        continue;
+      }
+
+      if (
+        (value.startsWith("\"") && value.endsWith("\"")) ||
+        (value.startsWith("'") && value.endsWith("'"))
+      ) {
+        value = value.slice(1, -1);
+      }
+
+      process.env[key] = value;
+    }
+  }
+}
+
+function firstDefined(...keys) {
+  for (const key of keys) {
+    if (process.env[key]) {
+      return process.env[key];
+    }
+  }
+
+  return undefined;
+}
 
 function getSupabaseClient() {
-  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
-    console.warn("Supabase environment variables are missing. Database writes are disabled.");
+  if (!SUPABASE_URL || !SUPABASE_KEY) {
+    console.warn(
+      "Supabase environment variables are missing. Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY (or SUPABASE_ANON_KEY). Database writes are disabled."
+    );
     return null;
   }
 
-  return createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  return createClient(SUPABASE_URL, SUPABASE_KEY);
 }
 
 const supabase = getSupabaseClient();
@@ -28,20 +93,38 @@ const supabase = getSupabaseClient();
 // HELPERS
 // --------------------------------------------------
 async function sendWhatsAppMessage(to, body) {
-  await axios.post(
-    `https://graph.facebook.com/v19.0/${PHONE_NUMBER_ID}/messages`,
-    {
-      messaging_product: "whatsapp",
-      to,
-      text: { body }
-    },
-    {
-      headers: {
-        Authorization: `Bearer ${ACCESS_TOKEN}`,
-        "Content-Type": "application/json"
+  if (!ACCESS_TOKEN || !PHONE_NUMBER_ID) {
+    throw new Error(
+      "WhatsApp environment variables are missing. Set ACCESS_TOKEN and PHONE_NUMBER_ID before sending messages."
+    );
+  }
+
+  try {
+    await axios.post(
+      `https://graph.facebook.com/v19.0/${PHONE_NUMBER_ID}/messages`,
+      {
+        messaging_product: "whatsapp",
+        to,
+        text: { body }
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${ACCESS_TOKEN}`,
+          "Content-Type": "application/json"
+        }
       }
+    );
+  } catch (error) {
+    const metaError = error.response?.data?.error;
+
+    if (metaError?.code === 190 && metaError?.error_subcode === 463) {
+      throw new Error(
+        "WhatsApp access token expired. Generate a new permanent or long-lived Meta access token, update ACCESS_TOKEN, and restart the server."
+      );
     }
-  );
+
+    throw error;
+  }
 }
 
 async function logMessage(wa_id, message_text, reply_text) {
