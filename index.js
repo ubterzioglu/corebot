@@ -145,6 +145,16 @@ async function sendWhatsAppMessage(to, body) {
       );
     }
 
+    if (metaError?.code === 200) {
+      throw new Error(
+        "Meta API access blocked (code 200). Check App status, WABA restrictions, Business Verification, and token permissions in Meta Business Manager. Then generate a new token and restart."
+      );
+    }
+
+    if (metaError) {
+      console.error("Meta send error payload:", JSON.stringify(metaError));
+    }
+
     throw error;
   }
 }
@@ -567,9 +577,14 @@ app.post("/webhook", async (req, res) => {
     console.log("Incoming message:", text);
 
     const user = await getOrCreateUser(from);
+    console.log("User loaded, step:", user.current_step);
+
     const reply = await buildReply(user, text);
+    console.log("Reply built, length:", reply.length);
 
     await sendWhatsAppMessage(from, reply);
+    console.log("Reply sent OK to:", from);
+
     await logMessage(from, text, reply);
 
     return res.sendStatus(200);
