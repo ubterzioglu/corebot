@@ -90,6 +90,23 @@ function getSupabaseClient() {
 const supabase = getSupabaseClient();
 
 // --------------------------------------------------
+// WHATSAPP GROUP LINKS CONFIGURATION
+// --------------------------------------------------
+const GROUP_LINKS = {
+  "danisman": process.env.WA_GROUP_DANISMAN || "https://chat.whatsapp.com/L3FeJVRpPIb75bQGG7M3oN",
+  "isletme": process.env.WA_GROUP_ISLETME || "https://chat.whatsapp.com/L3FeJVRpPIb75bQGG7M3oN", 
+  "dernek": process.env.WA_GROUP_DERNEK || "https://chat.whatsapp.com/L3FeJVRpPIb75bQGG7M3oN",
+  "vakif": process.env.WA_GROUP_VAKIF || "https://chat.whatsapp.com/L3FeJVRpPIb75bQGG7M3oN",
+  "radyo-tv": process.env.WA_GROUP_RADYO_TV || "https://chat.whatsapp.com/L3FeJVRpPIb75bQGG7M3oN",
+  "blogger-vlogger": process.env.WA_GROUP_CREATORS || "https://chat.whatsapp.com/L3FeJVRpPIb75bQGG7M3oN",
+  "influencer": process.env.WA_GROUP_CREATORS || "https://chat.whatsapp.com/L3FeJVRpPIb75bQGG7M3oN",
+  "sehir-elcisi": process.env.WA_GROUP_AMBASSADORS || "https://chat.whatsapp.com/L3FeJVRpPIb75bQGG7M3oN",
+  "bireysel": "https://chat.whatsapp.com/L3FeJVRpPIb75bQGG7M3oN",
+  "support": process.env.WA_GROUP_INVESTORS || "https://chat.whatsapp.com/L3FeJVRpPIb75bQGG7M3oN",
+  "backer": process.env.WA_GROUP_BACKERS || "https://chat.whatsapp.com/L3FeJVRpPIb75bQGG7M3oN"
+};
+
+// --------------------------------------------------
 // HELPERS
 // --------------------------------------------------
 async function sendWhatsAppMessage(to, body) {
@@ -354,6 +371,59 @@ async function buildReply(user, incomingText) {
 }
 
 // --------------------------------------------------
+// FORM SUBMISSION PROCESSING
+// --------------------------------------------------
+async function processFormSubmission(submission) {
+  try {
+    // Validate submission data
+    if (!submission.phone || !submission.whatsapp_interest || submission.status !== 'new') {
+      console.log('Skipping submission - invalid data or already processed:', submission.id);
+      return;
+    }
+
+    // Determine group link based on category
+    let groupLink = GROUP_LINKS[submission.category] || GROUP_LINKS['bireysel'];
+    
+    // Build personalized welcome message
+    const firstName = submission.first_name || '';
+    const lastName = submission.last_name || '';
+    const fullName = firstName || lastName ? `${firstName} ${lastName}`.trim() : 'Değerli kullanıcı';
+    const city = submission.city || '';
+    const country = submission.country || '';
+    const location = city || country ? `\nKonumun: ${city}${country && city ? `, ${country}` : country}` : '';
+    
+    const welcomeMessage = 
+      `Merhaba ${fullName}! 👋\n\n` +
+      `CorteQS topluluğuna hoş geldin! 🚀${location}\n\n` +
+      `Aşağıdaki WhatsApp grubuna katılarak topluluğumuzla bağlantı kurabilirsin:\n${groupLink}\n\n` +
+      `Herhangi bir sorun olursa bana buradan ulaşabilirsin. 🤝`;
+
+    console.log(`Processing submission ${submission.id} for ${submission.phone}`);
+    
+    // Send WhatsApp message
+    await sendWhatsAppMessage(submission.phone, welcomeMessage);
+    
+    // Update submission status to prevent reprocessing
+    if (supabase) {
+      const { error } = await supabase
+        .from('submissions')
+        .update({ status: 'contacted' })
+        .eq('id', submission.id);
+      
+      if (error) {
+        console.error('Failed to update submission status:', error);
+      } else {
+        console.log(`Successfully processed and updated submission ${submission.id}`);
+      }
+    }
+    
+  } catch (error) {
+    console.error('Error processing form submission:', error.response?.data || error.message || error);
+    // Don't throw error to prevent crashing the Realtime listener
+  }
+}
+
+// --------------------------------------------------
 // WEBHOOK VERIFICATION
 // --------------------------------------------------
 app.get("/webhook", (req, res) => {
@@ -409,4 +479,48 @@ app.get("/", (req, res) => {
 
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
+  
+  // --------------------------------------------------
+  // REALTIME SUBSCRIPTION FOR FORM SUBMISSIONS
+  // --------------------------------------------------
+  if (supabase) {
+    try {
+      const submissionsChannel = supabase
+        .channel('submissions-channel')
+        .on(
+          'postgres_changes',
+          {
+            event: 'INSERT',
+            schema: 'public',
+            table: 'submissions',
+            filter: 'whatsapp_interest=eq.true'
+          },
+          (payload) => {
+            console.log('New form submission detected:', payload.new.id);
+            processFormSubmission(payload.new);
+          }
+        )
+        .subscribe((status) => {
+          if (status === 'SUBSCRIBED') {
+            console.log('Subscribed to submissions table Realtime channel');
+          } else {
+            console.error('Realtime subscription status:', status);
+          }
+        });
+      
+      // Handle channel errors
+      submissionsChannel.on('CHANNEL_ERROR', (error) => {
+        console.error('Realtime channel error:', error);
+      });
+      
+      // Handle broadcast errors  
+      submissionsChannel.on('BROADCAST_ERROR', (error) => {
+        console.error('Realtime broadcast error:', error);
+      });
+    } catch (error) {
+      console.error('Failed to set up Realtime subscription:', error);
+    }
+  } else {
+    console.warn('Supabase client not available - skipping Realtime subscription');
+  }
 });
