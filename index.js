@@ -196,7 +196,7 @@ const MENU_TEXT =
   "1️⃣ Hızlı yönlendirme\n" +
   "2️⃣ Kayıt ol / Profil oluştur\n" +
   "3️⃣ Detaylı form (para kazanma & referral)\n" +
-  "4️⃣ İnsanla görüş";
+  "4️⃣ İnsanla görüş\n\nAna menüye dönmek için 'm' yazın.\n\nTürk Diasporası CorteQS'e desteğin için teşekkürler!";
 
 const CATEGORY_MAP = [
   { key: "career", label: "İş & Kariyer" },
@@ -210,7 +210,7 @@ const CATEGORY_MAP = [
 
 function isMenuWord(text) {
   const t = (text || "").toLowerCase().trim();
-  return t === "menü" || t === "menu" || t === "ana menü" || t === "anaMenü";
+  return t === "menü" || t === "menu" || t === "ana menü" || t === "anaMenü" || t === "m";
 }
 
 function isSkipWord(text) {
@@ -353,13 +353,13 @@ async function buildReply(user, incomingText) {
       return handleMenuChoice(user, choice);
     }
     await updateUser(user.wa_id, { current_step: "MENU" });
-    return "CorteQS'e hoş geldin 🚀\n\n" + MENU_TEXT;
+    return "CorteQS'e hoş geldin 🚀\n\n" + MENU_TEXT + "\n\nAna menüye dönmek için 'm' yazın.\n\nTürk Diasporası CorteQS'e desteğin için teşekkürler!";
   }
 
   if (user.current_step === "MENU") {
     const choice = parseMenuChoice(text);
     if (choice) return handleMenuChoice(user, choice);
-    return "Anlayamadım 🤔\n\n" + MENU_TEXT + "\n\nİstersen sadece 1, 2, 3 veya 4 yaz.";
+    return "Anlayamadım 🤔\n\n" + MENU_TEXT + "\n\nİstersen sadece 1, 2, 3 veya 4 yaz.\n\nAna menüye dönmek için 'm' yazın.\n\nTürk Diasporası CorteQS'e desteğin için teşekkürler!";
   }
 
   if (user.current_step === "ASK_NAME") {
@@ -369,11 +369,11 @@ async function buildReply(user, incomingText) {
     }
     if (isSkipWord(text)) {
       await updateUser(user.wa_id, { name: null, surname: null, current_step: "ASK_LOCATION" });
-      return "Tamam, geçelim. ⏩\n\nŞehir ve ülke bilgisini yaz (örnek: Almanya - Dortmund).\n\nGeçmek için 'geç', menü için 'menü' yaz.";
+      return "Tamam, geçelim. ⏩\n\nŞehir ve ülke bilgisini yaz (örnek: Almanya - Dortmund).\n\nGeçmek için 'geç', menü için 'm' yazın.\n\nTürk Diasporası CorteQS'e desteğin için teşekkürler!";
     }
     const { name, surname } = parseName(text);
     await updateUser(user.wa_id, { name, surname, current_step: "ASK_LOCATION" });
-    return `Merhaba ${name}! 👋\n\nŞehir ve ülke bilgisini yaz (örnek: Almanya - Dortmund).\n\nGeçmek için 'geç', menü için 'menü' yaz.`;
+    return `Merhaba ${name}! 👋\n\nŞehir ve ülke bilgisini yaz (örnek: Almanya - Dortmund).\n\nGeçmek için 'geç', menü için 'm' yazın.\n\nTürk Diasporası CorteQS'e desteğin için teşekkürler!`;
   }
 
   if (user.current_step === "ASK_LOCATION") {
@@ -383,11 +383,11 @@ async function buildReply(user, incomingText) {
     }
     if (isSkipWord(text)) {
       await updateUser(user.wa_id, { country: null, city: null, current_step: "ASK_CATEGORY" });
-      return "Tamam, geçelim. ⏩\n\n" + buildCategoryText();
+      return "Tamam, geçelim. ⏩\n\n" + buildCategoryText() + "\n\nAna menüye dönmek için 'm' yazın.\n\nTürk Diasporası CorteQS'e desteğin için teşekkürler!";
     }
     const { country, city } = parseLocation(text);
     await updateUser(user.wa_id, { country, city, current_step: "ASK_CATEGORY" });
-    return "Süper! 📍\n\n" + buildCategoryText();
+    return "Süper! 📍\n\n" + buildCategoryText() + "\n\nAna menüye dönmek için 'm' yazın.\n\nTürk Diasporası CorteQS'e desteğin için teşekkürler!";
   }
 
   if (user.current_step === "ASK_CATEGORY") {
@@ -396,9 +396,9 @@ async function buildReply(user, incomingText) {
       return MENU_TEXT;
     }
     const catKey = parseCategoryChoice(text);
-    if (!catKey) return "Anlayamadım 🤔\n\n" + buildCategoryText();
+    if (!catKey) return "Anlayamadım 🤔\n\n" + buildCategoryText() + "\n\nAna menüye dönmek için 'm' yazın.\n\nTürk Diasporası CorteQS'e desteğin için teşekkürler!";
     await updateUser(user.wa_id, { category: catKey, current_step: "ASK_NOTE" });
-    return "Notun var mı? 💬\n\nÖrneğin: \"Almanya'da iş bulmak istiyorum\" veya \"Berlin'de networking arıyorum\"\n\nGeçmek için 'geç', menü için 'menü' yaz.";
+    return "Notun var mı? 💬\n\nÖrneğin: \"Almanya'da iş bulmak istiyorum\" veya \"Berlin'de networking arıyorum\"\n\nGeçmek için 'geç', menü için 'm' yazın.\n\nTürk Diasporası CorteQS'e desteğin için teşekkürler!";
   }
 
   if (user.current_step === "ASK_NOTE") {
@@ -408,52 +408,52 @@ async function buildReply(user, incomingText) {
     }
     if (isSkipWord(text)) {
       await updateUser(user.wa_id, { note: null, current_step: "REDIRECT" });
-      return buildRedirectText();
+      return buildRedirectText() + "\n\nAna menüye dönmek için 'm' yazın.\n\nTürk Diasporası CorteQS'e desteğin için teşekkürler!";
     }
     await updateUser(user.wa_id, { note: text, current_step: "REDIRECT" });
-    return buildRedirectText();
+    return buildRedirectText() + "\n\nAna menüye dönmek için 'm' yazın.\n\nTürk Diasporası CorteQS'e desteğin için teşekkürler!";
   }
 
   if (user.current_step === "REDIRECT") {
     const num = parseInt(lowered, 10);
     if (num === 1) {
       await updateUser(user.wa_id, { current_step: "REFERRAL_ASK" });
-      return `Web sitesi: ${WEBSITE_URL}\n\n`;
+      return `Web sitesi: ${WEBSITE_URL}\n\nAna menüye dönmek için 'm' yazın.\n\nTürk Diasporası CorteQS'e desteğin için teşekkürler!`;
     }
     if (num === 2) {
       await updateUser(user.wa_id, { current_step: "REFERRAL_ASK" });
-      return `WhatsApp kanalı: ${WA_CHANNEL_LINK}\n\n`;
+      return `WhatsApp kanalı: ${WA_CHANNEL_LINK}\n\nAna menüye dönmek için 'm' yazın.\n\nTürk Diasporası CorteQS'e desteğin için teşekkürler!`;
     }
     if (num === 3) {
       await updateUser(user.wa_id, { current_step: "REFERRAL_ASK" });
-      return `İnsanla direkt iletişim: ${HUMAN_CONTACT_LINK}\n\n`;
+      return `İnsanla direkt iletişim: ${HUMAN_CONTACT_LINK}\n\nAna menüye dönmek için 'm' yazın.\n\nTürk Diasporası CorteQS'e desteğin için teşekkürler!`;
     }
     if (num === 4) {
       await updateUser(user.wa_id, { current_step: "MENU" });
       return MENU_TEXT;
     }
-    return "Anlayamadım 🤔\n\n" + buildRedirectText();
+    return "Anlayamadım 🤔\n\n" + buildRedirectText() + "\n\nAna menüye dönmek için 'm' yazın.\n\nTürk Diasporası CorteQS'e desteğin için teşekkürler!";
   }
 
   if (user.current_step === "REFERRAL_ASK") {
     const num = parseInt(lowered, 10);
     if (num === 1) {
       await updateUser(user.wa_id, { funnel_interest: true, current_step: "DONE" });
-      return `Detaylı form linki: ${DETAILED_FORM_LINK}\n\nEn kısa sürede dönüş yapacağız! 🙌`;
+      return `Detaylı form linki: ${DETAILED_FORM_LINK}\n\nEn kısa sürede dönüş yapacağız! 🙌\n\nAna menüye dönmek için 'm' yazın.\n\nTürk Diasporası CorteQS'e desteğin için teşekkürler!`;
     }
     if (num === 2 || num === 3) {
       await updateUser(user.wa_id, { funnel_interest: false, current_step: "DONE" });
-      return "Sorun değil 👍\n\nAna menüye dönmek için 'menü' yaz.";
+      return "Sorun değil 👍\n\nAna menüye dönmek için 'm' yazın.\n\nTürk Diasporası CorteQS'e desteğin için teşekkürler!";
     }
     return "Anlayamadım 🤔\n\n" +
       "Detaylı form ile para kazanma ve referral fırsatlarına erişmek ister misin?\n" +
       "1️⃣ Evet, detaylı katılmak istiyorum\n" +
       "2️⃣ Hayır\n" +
-      "3️⃣ Daha sonra";
+      "3️⃣ Daha sonra\n\nAna menüye dönmek için 'm' yazın.\n\nTürk Diasporası CorteQS'e desteğin için teşekkürler!";
   }
 
   if (user.current_step === "DONE") {
-    return "Kaydını aldım ✅\n\nAna menüye dönmek için 'menü' yaz.";
+    return "Kaydını aldım ✅\n\nAna menüye dönmek için 'm' yazın.\n\nTürk Diasporası CorteQS'e desteğin için teşekkürler!";
   }
 
   await updateUser(user.wa_id, { current_step: "WELCOME" });
@@ -463,19 +463,19 @@ async function buildReply(user, incomingText) {
 async function handleMenuChoice(user, choice) {
   if (choice === 1) {
     await updateUser(user.wa_id, { current_step: "REDIRECT" });
-    return "Hızlı yönlendirme ⚡\n\n" + buildRedirectText();
+    return "Hızlı yönlendirme ⚡\n\n" + buildRedirectText() + "\n\nAna menüye dönmek için 'm' yazın.\n\nTürk Diasporası CorteQS'e desteğin için teşekkürler!";
   }
   if (choice === 2) {
     await updateUser(user.wa_id, { current_step: "ASK_NAME" });
-    return "Kayıt / Profil oluşturma 📝\n\nAdını yaz (örnek: Ahmet Yılmaz).\n\nGeçmek için 'geç', menü için 'menü' yaz.";
+    return "Kayıt / Profil oluşturma 📝\n\nAdını yaz (örnek: Ahmet Yılmaz).\n\nGeçmek için 'geç', menü için 'm' yazın.\n\nTürk Diasporası CorteQS'e desteğin için teşekkürler!";
   }
   if (choice === 3) {
     await updateUser(user.wa_id, { current_step: "REFERRAL_ASK" });
-    return `Detaylı form ile para kazanma ve referral fırsatlarına erişebilirsin 💰\n\nForm linki: ${DETAILED_FORM_LINK}\n\n`;
+    return `Detaylı form ile para kazanma ve referral fırsatlarına erişebilirsin 💰\n\nForm linki: ${DETAILED_FORM_LINK}\n\nAna menüye dönmek için 'm' yazın.\n\nTürk Diasporası CorteQS'e desteğin için teşekkürler!`;
   }
   if (choice === 4) {
     await updateUser(user.wa_id, { current_step: "DONE" });
-    return `İnsanla görüşmek için:\n${HUMAN_CONTACT_LINK}\n\nAna menüye dönmek için 'menü' yaz.`;
+    return `İnsanla görüşmek için:\n${HUMAN_CONTACT_LINK}\n\nAna menüye dönmek için 'm' yazın.\n\nTürk Diasporası CorteQS'e desteğin için teşekkürler!`;
   }
   return MENU_TEXT;
 }
@@ -486,7 +486,7 @@ function buildRedirectText() {
     "2️⃣ WhatsApp kanalı\n" +
     "3️⃣ İnsanla direkt iletişim\n" +
     "4️⃣ Ana menüye dön\n\n" +
-    "Seçimini yaz.";
+    "Seçimini yaz.\n\nAna menüye dönmek için 'm' yazın.\n\nTürk Diasporası CorteQS'e desteğin için teşekkürler!";
 }
 
 // --------------------------------------------------
