@@ -67,20 +67,32 @@
   "hotPaths": [
     {
       "path": "index.js",
-      "accessCount": 4,
-      "lastAccessed": 1776762017456,
+      "accessCount": 6,
+      "lastAccessed": 1776775902256,
+      "type": "file"
+    },
+    {
+      "path": "",
+      "accessCount": 2,
+      "lastAccessed": 1776772928623,
+      "type": "directory"
+    },
+    {
+      "path": ".env",
+      "accessCount": 2,
+      "lastAccessed": 1776774233792,
+      "type": "file"
+    },
+    {
+      "path": "AGENTS.md",
+      "accessCount": 2,
+      "lastAccessed": 1776775902292,
       "type": "file"
     },
     {
       "path": "package.json",
-      "accessCount": 1,
-      "lastAccessed": 1776761654284,
-      "type": "file"
-    },
-    {
-      "path": ".env",
-      "accessCount": 1,
-      "lastAccessed": 1776761658485,
+      "accessCount": 2,
+      "lastAccessed": 1776775902339,
       "type": "file"
     },
     {
@@ -90,9 +102,9 @@
       "type": "file"
     },
     {
-      "path": "AGENTS.md",
+      "path": "supabase\\migrations\\001_bot_flow_v2.sql",
       "accessCount": 1,
-      "lastAccessed": 1776761658822,
+      "lastAccessed": 1776774251631,
       "type": "file"
     }
   ],
