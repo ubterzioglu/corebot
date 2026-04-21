@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CorteQS WhatsApp Bot - Kullanıcı Akışı</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'Segoe UI', system-ui, sans-serif; background: #0f0f1a; color: #e0e0e0; padding: 40px 20px; }
+    h1 { text-align: center; font-size: 1.8rem; margin-bottom: 8px; color: #25D366; }
+    .subtitle { text-align: center; color: #888; margin-bottom: 48px; font-size: 0.95rem; }
+
+    .flow-section { max-width: 720px; margin: 0 auto 60px; }
+    .flow-section h2 { font-size: 1.2rem; margin-bottom: 24px; padding-bottom: 8px; border-bottom: 1px solid #2a2a3d; color: #aaa; text-transform: uppercase; letter-spacing: 1px; }
+
+    .step { display: flex; gap: 20px; margin-bottom: 32px; align-items: flex-start; }
+    .step-num { flex-shrink: 0; width: 48px; height: 48px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 1.1rem; }
+    .step-content { flex: 1; }
+    .step-title { font-size: 1.15rem; font-weight: 600; margin-bottom: 6px; }
+    .step-desc { color: #999; font-size: 0.9rem; line-height: 1.5; margin-bottom: 12px; }
+
+    .chat-bubble { background: #1a1a2e; border-radius: 12px; padding: 16px; max-width: 480px; margin-bottom: 8px; position: relative; font-size: 0.9rem; line-height: 1.6; }
+    .chat-bubble.bot { border-left: 3px solid #25D366; }
+    .chat-bubble.user { border-left: 3px solid #5b5bff; margin-left: 40px; }
+    .chat-bubble .label { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; font-weight: 600; }
+    .chat-bubble.bot .label { color: #25D366; }
+    .chat-bubble.user .label { color: #5b5bff; }
+
+    .arrow-down { text-align: center; margin: 8px 0 8px 24px; color: #444; font-size: 1.4rem; }
+
+    .intent-list { list-style: none; padding: 0; margin: 8px 0; }
+    .intent-list li { padding: 4px 0; font-size: 0.88rem; }
+    .intent-list li::before { content: "▸ "; color: #25D366; }
+
+    .badge { display: inline-block; background: #25D36620; color: #25D366; padding: 2px 10px; border-radius: 20px; font-size: 0.75rem; font-weight: 600; margin-left: 8px; }
+
+    .green { background: #25D36630; color: #25D366; }
+    .blue { background: #5b5bff30; color: #5b5bff; }
+    .orange { background: #ff8c0030; color: #ff8c00; }
+    .red { background: #ff4d4d30; color: #ff4d4d; }
+    .purple { background: #a855f730; color: #a855f7; }
+
+    .table-section { max-width: 720px; margin: 0 auto 60px; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
+    th { text-align: left; padding: 10px 12px; background: #1a1a2e; color: #888; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.5px; }
+    td { padding: 10px 12px; border-top: 1px solid #1a1a2e; }
+    tr:hover td { background: #1a1a2e; }
+    code { background: #1a1a2e; padding: 2px 6px; border-radius: 4px; font-size: 0.85rem; color: #a855f7; }
+
+    .divider { max-width: 720px; margin: 0 auto 48px; border: none; border-top: 1px dashed #2a2a3d; }
+
+    .submission-flow { max-width: 720px; margin: 0 auto 60px; }
+    .submission-flow .step-num { background: #ff8c0030; color: #ff8c00; }
+  </style>
+</head>
+<body>
+
+<h1>CorteQS WhatsApp Bot</h1>
+<p class="subtitle">Mevcut kullanıcı akışı &amp; form gönderim entegrasyonu</p>
+
+<!-- ============================================================ -->
+<hr class="divider">
+<!-- ============================================================ -->
+
+<div class="flow-section">
+  <h2>1. Mevcut Bot Akışı (wa_users)</h2>
+
+  <div class="step">
+    <div class="step-num green">1</div>
+    <div class="step-content">
+      <div class="step-title">ASK_INTENT <span class="badge">Başlangıç</span></div>
+      <div class="step-desc">Kullanıcı bota ilk mesaj attığında veya <code>reset</code> yazdığında bu adımda başlar. 5 seçenek sunulur.</div>
+      <div class="chat-bubble bot">
+        <div class="label">Bot</div>
+        CorteQS'e hoş geldin 🚀<br><br>
+        Ne yapmak istiyorsun?<br>
+        1. Danışman bulmak<br>
+        2. Etkinliklere katılmak<br>
+        3. İşimi / hizmetimi büyütmek<br>
+        4. Şehrimi temsil etmek (Ambassador)<br>
+        5. İçerik üretmek
+      </div>
+      <div class="arrow-down">↓</div>
+      <div class="chat-bubble user">
+        <div class="label">Kullanıcı</div>
+        3 &nbsp;<span style="color:#666">(veya "işimi büyütmek", "hizmetimi büyüt" vs.)</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-num blue">2</div>
+    <div class="step-content">
+      <div class="step-title">ASK_CITY</div>
+      <div class="step-desc">Seçim kaydedilir, intent belirlenir. Kullanıcıdan şehir bilgisi istenir.</div>
+      <div class="chat-bubble bot">
+        <div class="label">Bot</div>
+        Seçimin alındı: İşimi / hizmetimi büyütmek<br><br>
+        Şimdi hangi şehirde olduğunu yaz.
+      </div>
+      <div class="arrow-down">↓</div>
+      <div class="chat-bubble user">
+        <div class="label">Kullanıcı</div>
+        İstanbul
+      </div>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-num purple">3</div>
+    <div class="step-content">
+      <div class="step-title">DONE <span class="badge">Tamamlandı</span></div>
+      <div class="step-desc">Şehir kaydedilir, intent'e göre kişiselleştirilmiş görev oluşturulur (<code>wa_tasks</code> tablosuna yazılır). Kullanıcıya özet ve görev bildirilir.</div>
+      <div class="chat-bubble bot">
+        <div class="label">Bot</div>
+        Süper. Şehir: İstanbul<br>
+        Alan: İşimi / hizmetimi büyütmek<br><br>
+        İlk görevin:<br>
+        İstanbul bölgesinde ulaşmak istediğin müşteri tipini tek cümleyle yaz.<br><br>
+        Baştan başlamak için 'reset' yazabilirsin.
+      </div>
+      <div class="arrow-down">↓</div>
+      <div class="chat-bubble bot">
+        <div class="label">Bot (sonraki mesajlar)</div>
+        Kaydını aldım ✅<br><br>
+        Baştan başlamak istersen 'reset' yaz.<br>
+        Yakında profil tamamlama linkini de göndereceğim.
+      </div>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-num red">↺</div>
+    <div class="step-content">
+      <div class="step-title">reset</div>
+      <div class="step-desc">Kullanıcı her an <code>reset</code> yazarak ASK_INTENT adımına dönebilir. Tüm veriler sıfırlanır.</div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<hr class="divider">
+<!-- ============================================================ -->
+
+<div class="flow-section">
+  <h2>Intent Eşleşme Tablosu</h2>
+  <div class="table-section">
+    <table>
+      <thead>
+        <tr><th>Girdi</th><th>Intent</th><th>Etiket</th><th>Görev Örneği</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>1</code> veya <code>danışman</code></td>
+          <td><code>advisor</code></td>
+          <td>Danışman bulmak</td>
+          <td>{şehir} için danışmanlık ihtiyacını netleştir…</td>
+        </tr>
+        <tr>
+          <td><code>2</code> veya <code>etkinlik</code></td>
+          <td><code>events</code></td>
+          <td>Etkinliklere katılmak</td>
+          <td>{şehir} için ilk etkinliğini seç…</td>
+        </tr>
+        <tr>
+          <td><code>3</code> veya <code>işimi</code> / <code>büyüt</code></td>
+          <td><code>business</code></td>
+          <td>İşimi / hizmetimi büyütmek</td>
+          <td>{şehir} bölgesinde müşteri tipini yaz…</td>
+        </tr>
+        <tr>
+          <td><code>4</code> veya <code>ambassador</code> / <code>şehrimi</code></td>
+          <td><code>ambassador</code></td>
+          <td>Şehrimi temsil etmek</td>
+          <td>{şehir} için 1 etkinlik önerisi, 3 davet hedefi…</td>
+        </tr>
+        <tr>
+          <td><code>5</code> veya <code>içerik</code></td>
+          <td><code>creator</code></td>
+          <td>İçerik üretmek</td>
+          <td>{şehir} için ilk içerik konunu belirle…</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<hr class="divider">
+<!-- ============================================================ -->
+
+<div class="submission-flow">
+  <h2>2. Form Gönderim Akışı (submissions) — Yeni</h2>
+
+  <div class="step">
+    <div class="step-num orange">1</div>
+    <div class="step-content">
+      <div class="step-title">Realtime Dinleme</div>
+      <div class="step-desc">Bot, Supabase Realtime ile <code>submissions</code> tablosunu dinler. Sadece <code>whatsapp_interest = true</code> olan yeni kayıtlar işlenir.</div>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-num orange">2</div>
+    <div class="step-content">
+      <div class="step-title">Doğrulama &amp; Mesaj Oluşturma</div>
+      <div class="step-desc">
+        <ul class="intent-list">
+          <li><code>phone</code>, <code>whatsapp_interest</code> ve <code>status = 'new'</code> kontrol edilir</li>
+          <li><code>category</code> alanına göre uygun WhatsApp grup linki seçilir</li>
+          <li>Kişiselleştirilmiş Türkçe karşılama mesajı oluşturulur (ad, şehir, ülke, grup linki)</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-num orange">3</div>
+    <div class="step-content">
+      <div class="step-title">WhatsApp Mesajı Gönderimi</div>
+      <div class="step-desc">Formdaki telefon numarasına (E.164 formatında) hoş geldin mesajı ve grup davet linki gönderilir.</div>
+      <div class="chat-bubble bot">
+        <div class="label">Bot</div>
+        Merhaba Ahmet! 👋<br><br>
+        CorteQS topluluğuna hoş geldin! 🚀<br>
+        Konumun: İstanbul, Türkiye<br><br>
+        Aşağıdaki WhatsApp grubuna katılarak topluluğumuzla bağlantı kurabilirsin:<br>
+        https://chat.whatsapp.com/XXXXX<br><br>
+        Herhangi bir sorun olursa bana buradan ulaşabilirsin. 🤝
+      </div>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-num orange">4</div>
+    <div class="step-content">
+      <div class="step-title">Durum Güncelleme</div>
+      <div class="step-desc">Başarılı gönderim sonrası kayıt durumu <code>contacted</code> olarak güncellenir. Tekrar işlenmez.</div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<hr class="divider">
+<!-- ============================================================ -->
+
+<div class="flow-section">
+  <h2>Kategori → Grup Linki Eşleşmesi</h2>
+  <div class="table-section">
+    <table>
+      <thead>
+        <tr><th>Kategori</th><th>Env Değişkeni</th><th>Varsayılan</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><code>danisman</code></td><td><code>WA_GROUP_DANISMAN</code></td><td rowspan="11" style="vertical-align:middle; color:#666;">Mevcut bireysel grubu<br><code>chat.whatsapp.com/L3Fe…</code></td></tr>
+        <tr><td><code>isletme</code></td><td><code>WA_GROUP_ISLETME</code></td></tr>
+        <tr><td><code>dernek</code></td><td><code>WA_GROUP_DERNEK</code></td></tr>
+        <tr><td><code>vakif</code></td><td><code>WA_GROUP_VAKIF</code></td></tr>
+        <tr><td><code>radyo-tv</code></td><td><code>WA_GROUP_RADYO_TV</code></td></tr>
+        <tr><td><code>blogger-vlogger</code></td><td><code>WA_GROUP_CREATORS</code></td></tr>
+        <tr><td><code>influencer</code></td><td><code>WA_GROUP_CREATORS</code></td></tr>
+        <tr><td><code>sehir-elcisi</code></td><td><code>WA_GROUP_AMBASSADORS</code></td></tr>
+        <tr><td><code>bireysel</code></td><td>— (sabit)</td></tr>
+        <tr><td><code>support</code></td><td><code>WA_GROUP_INVESTORS</code></td></tr>
+        <tr><td><code>backer</code></td><td><code>WA_GROUP_BACKERS</code></td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<hr class="divider">
+<!-- ============================================================ -->
+
+<div class="flow-section">
+  <h2>Supabase Tabloları</h2>
+  <div class="table-section">
+    <table>
+      <thead>
+        <tr><th>Tablo</th><th>Açıklama</th><th>Kullanım</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><code>wa_users</code></td><td>Kullanıcı durumu</td><td>wa_id, intent, city, current_step</td></tr>
+        <tr><td><code>wa_messages</code></td><td>Mesaj kayıtları</td><td>Gelen/giden mesajların logu</td></tr>
+        <tr><td><code>wa_tasks</code></td><td>Kullanıcı görevleri</td><td>Intent'e göre atanan görevler</td></tr>
+        <tr><td><code>submissions</code></td><td>Form gönderimleri</td><td>Web formu kayıtları, Realtime dinlenen</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+</body>
+</html>

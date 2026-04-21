@@ -21,6 +21,11 @@ const SUPABASE_KEY = firstDefined(
   "VITE_SUPABASE_PUBLISHABLE_KEY"
 );
 
+const WA_CHANNEL_LINK = process.env.WA_CHANNEL_LINK || "https://chat.whatsapp.com/PLACEHOLDER";
+const DETAILED_FORM_LINK = process.env.DETAILED_FORM_LINK || "https://corteqs.net/PLACEHOLDER";
+const HUMAN_CONTACT_LINK = process.env.HUMAN_CONTACT_LINK || "https://wa.me/491739569429";
+const WEBSITE_URL = process.env.WEBSITE_URL || "https://corteqs.net/";
+
 function loadEnvFiles() {
   const envFiles = [".env", ".secret"];
 
@@ -176,60 +181,96 @@ async function createTask(wa_id, task) {
   }
 }
 
-function normalizeIntent(text) {
+const MENU_TEXT =
+  "Ne yapmak istiyorsun?\n" +
+  "1️⃣ Hızlı yönlendirme\n" +
+  "2️⃣ Kayıt ol / Profil oluştur\n" +
+  "3️⃣ Detaylı form (para kazanma & referral)\n" +
+  "4️⃣ İnsanla görüş";
+
+const CATEGORY_MAP = [
+  { key: "career", label: "İş & Kariyer" },
+  { key: "networking", label: "Networking" },
+  { key: "relocation", label: "Relokasyon" },
+  { key: "consulting", label: "Danışmanlık" },
+  { key: "partnership", label: "İş ortaklığı" },
+  { key: "monetization", label: "Referral / Para kazanma" },
+  { key: "other", label: "Diğer" }
+];
+
+function isMenuWord(text) {
   const t = (text || "").toLowerCase().trim();
+  return t === "menü" || t === "menu" || t === "ana menü" || t === "anaMenü";
+}
 
-  if (t === "1" || t.includes("danışman")) return "advisor";
-  if (t === "2" || t.includes("etkinlik")) return "events";
-  if (t === "3" || t.includes("işimi") || t.includes("hizmetimi") || t.includes("büyüt")) return "business";
-  if (t === "4" || t.includes("ambassador") || t.includes("şehrimi")) return "ambassador";
-  if (t === "5" || t.includes("içerik")) return "creator";
+function isSkipWord(text) {
+  const t = (text || "").toLowerCase().trim();
+  return ["geç", "skip", "sonra", "hayır", "yok", "gerek yok"].includes(t);
+}
 
+function parseMenuChoice(text) {
+  const t = (text || "").toLowerCase().trim();
+  if (t === "1" || t.includes("hızlı") || t.includes("yonlendir")) return 1;
+  if (t === "2" || t.includes("kayıt") || t.includes("kayit") || t.includes("profil")) return 2;
+  if (t === "3" || t.includes("detaylı") || t.includes("detayli") || t.includes("form") || t.includes("referral") || t.includes("para")) return 3;
+  if (t === "4" || t.includes("insan") || t.includes("görüş") || t.includes("gorus")) return 4;
   return null;
 }
 
-function getIntentLabel(intent) {
-  switch (intent) {
-    case "advisor":
-      return "Danışman bulmak";
-    case "events":
-      return "Etkinliklere katılmak";
-    case "business":
-      return "İşimi / hizmetimi büyütmek";
-    case "ambassador":
-      return "Şehrimi temsil etmek (Ambassador)";
-    case "creator":
-      return "İçerik üretmek";
-    default:
-      return "Bilinmiyor";
+function parseCategoryChoice(text) {
+  const t = (text || "").toLowerCase().trim();
+  const num = parseInt(t, 10);
+  if (num >= 1 && num <= 7) return CATEGORY_MAP[num - 1].key;
+  for (const cat of CATEGORY_MAP) {
+    if (t.includes(cat.key) || t.includes(cat.label.toLowerCase())) return cat.key;
   }
+  if (t.includes("kariyer") || t.includes("iş")) return "career";
+  if (t.includes("network")) return "networking";
+  if (t.includes("relok") || t.includes("taşın") || t.includes("tasin")) return "relocation";
+  if (t.includes("danışman") || t.includes("danisman")) return "consulting";
+  if (t.includes("ortak")) return "partnership";
+  if (t.includes("para") || t.includes("referral") || t.includes("kazan")) return "monetization";
+  if (t.includes("diğer") || t.includes("diger")) return "other";
+  return null;
 }
 
-function getTaskByIntent(intent, city) {
-  switch (intent) {
-    case "advisor":
-      return `${city} için danışmanlık ihtiyacını netleştir ve profilini tamamla.`;
-    case "events":
-      return `${city} için ilk etkinliğini seç ve katılım durumunu bildir.`;
-    case "business":
-      return `${city} bölgesinde ulaşmak istediğin müşteri tipini tek cümleyle yaz.`;
-    case "ambassador":
-      return `${city} için ilk hafta 1 etkinlik önerisi ve 3 kullanıcı daveti hedefi oluştur.`;
-    case "creator":
-      return `${city} için ilk içerik konunu belirle ve paylaşım fikrini yaz.`;
-    default:
-      return `${city} için ilk aksiyonunu tamamla.`;
+function parseName(text) {
+  const parts = (text || "").trim().split(/\s+/);
+  if (parts.length === 0 || !parts[0]) return { name: null, surname: null };
+  if (parts.length === 1) return { name: parts[0], surname: null };
+  return { name: parts[0], surname: parts.slice(1).join(" ") };
+}
+
+function parseLocation(text) {
+  const t = (text || "").trim();
+  if (!t) return { country: null, city: null };
+  const parts = t.split(/\s*[-,–—]\s*/);
+  if (parts.length >= 2) {
+    return { country: parts[0].trim(), city: parts.slice(1).join(" ").trim() };
   }
+  const words = t.split(/\s+/);
+  if (words.length === 1) return { country: null, city: words[0] };
+  return { country: words[0], city: words.slice(1).join(" ") };
+}
+
+function buildCategoryText() {
+  return "Hangi konuda destek arıyorsun?\n" +
+    CATEGORY_MAP.map((c, i) => `${i + 1}️⃣ ${c.label}`).join("\n") +
+    "\n\nİstersen sadece numara yaz.";
 }
 
 async function getOrCreateUser(wa_id) {
   if (!supabase) {
     return {
       wa_id,
-      intent: null,
+      name: null,
+      surname: null,
       city: null,
-      role: null,
-      current_step: "ASK_INTENT"
+      country: null,
+      category: null,
+      note: null,
+      funnel_interest: null,
+      current_step: "WELCOME"
     };
   }
 
@@ -252,7 +293,7 @@ async function getOrCreateUser(wa_id) {
     .from("wa_users")
     .insert({
       wa_id,
-      current_step: "ASK_INTENT"
+      current_step: "WELCOME"
     })
     .select()
     .single();
@@ -290,84 +331,152 @@ async function buildReply(user, incomingText) {
   const text = (incomingText || "").trim();
   const lowered = text.toLowerCase();
 
-  if (lowered === "reset") {
-    await updateUser(user.wa_id, {
-      intent: null,
-      city: null,
-      role: null,
-      current_step: "ASK_INTENT"
-    });
-
-    return (
-      "CorteQS’e hoş geldin 🚀\n\n" +
-      "Ne yapmak istiyorsun?\n" +
-      "1. Danışman bulmak\n" +
-      "2. Etkinliklere katılmak\n" +
-      "3. İşimi / hizmetimi büyütmek\n" +
-      "4. Şehrimi temsil etmek (Ambassador)\n" +
-      "5. İçerik üretmek"
-    );
+  if (lowered === "reset" || isMenuWord(text)) {
+    await updateUser(user.wa_id, { current_step: "MENU" });
+    return "CorteQS'e hoş geldin 🚀\n\n" + MENU_TEXT;
   }
 
-  if (user.current_step === "ASK_INTENT") {
-    const intent = normalizeIntent(text);
-
-    if (!intent) {
-      return (
-        "CorteQS’e hoş geldin 🚀\n\n" +
-        "Ne yapmak istiyorsun?\n" +
-        "1. Danışman bulmak\n" +
-        "2. Etkinliklere katılmak\n" +
-        "3. İşimi / hizmetimi büyütmek\n" +
-        "4. Şehrimi temsil etmek (Ambassador)\n" +
-        "5. İçerik üretmek\n\n" +
-        "İstersen sadece 1, 2, 3, 4 veya 5 yaz."
-      );
+  if (user.current_step === "WELCOME") {
+    const choice = parseMenuChoice(text);
+    if (choice) {
+      await updateUser(user.wa_id, { current_step: "MENU" });
+      return handleMenuChoice(user, choice);
     }
-
-    await updateUser(user.wa_id, {
-      intent,
-      current_step: "ASK_CITY"
-    });
-
-    return (
-      `Seçimin alındı: ${getIntentLabel(intent)}\n\n` +
-      "Şimdi hangi şehirde olduğunu yaz."
-    );
+    await updateUser(user.wa_id, { current_step: "MENU" });
+    return "CorteQS'e hoş geldin 🚀\n\n" + MENU_TEXT;
   }
 
-  if (user.current_step === "ASK_CITY") {
-    if (text.length < 2) {
-      return "Lütfen geçerli bir şehir yaz.";
+  if (user.current_step === "MENU") {
+    const choice = parseMenuChoice(text);
+    if (choice) return handleMenuChoice(user, choice);
+    return "Anlayamadım 🤔\n\n" + MENU_TEXT + "\n\nİstersen sadece 1, 2, 3 veya 4 yaz.";
+  }
+
+  if (user.current_step === "ASK_NAME") {
+    if (isMenuWord(text)) {
+      await updateUser(user.wa_id, { current_step: "MENU" });
+      return MENU_TEXT;
     }
+    if (isSkipWord(text)) {
+      await updateUser(user.wa_id, { name: null, surname: null, current_step: "ASK_LOCATION" });
+      return "Tamam, geçelim. ⏩\n\nŞehir ve ülke bilgisini yaz (örnek: Almanya - Dortmund).\n\nGeçmek için 'geç', menü için 'menü' yaz.";
+    }
+    const { name, surname } = parseName(text);
+    await updateUser(user.wa_id, { name, surname, current_step: "ASK_LOCATION" });
+    return `Merhaba ${name}! 👋\n\nŞehir ve ülke bilgisini yaz (örnek: Almanya - Dortmund).\n\nGeçmek için 'geç', menü için 'menü' yaz.`;
+  }
 
-    const city = text;
-    const task = getTaskByIntent(user.intent, city);
+  if (user.current_step === "ASK_LOCATION") {
+    if (isMenuWord(text)) {
+      await updateUser(user.wa_id, { current_step: "MENU" });
+      return MENU_TEXT;
+    }
+    if (isSkipWord(text)) {
+      await updateUser(user.wa_id, { country: null, city: null, current_step: "ASK_CATEGORY" });
+      return "Tamam, geçelim. ⏩\n\n" + buildCategoryText();
+    }
+    const { country, city } = parseLocation(text);
+    await updateUser(user.wa_id, { country, city, current_step: "ASK_CATEGORY" });
+    return "Süper! 📍\n\n" + buildCategoryText();
+  }
 
-    await updateUser(user.wa_id, {
-      city,
-      current_step: "DONE"
-    });
+  if (user.current_step === "ASK_CATEGORY") {
+    if (isMenuWord(text)) {
+      await updateUser(user.wa_id, { current_step: "MENU" });
+      return MENU_TEXT;
+    }
+    const catKey = parseCategoryChoice(text);
+    if (!catKey) return "Anlayamadım 🤔\n\n" + buildCategoryText();
+    await updateUser(user.wa_id, { category: catKey, current_step: "ASK_NOTE" });
+    return "Notun var mı? 💬\n\nÖrneğin: \"Almanya'da iş bulmak istiyorum\" veya \"Berlin'de networking arıyorum\"\n\nGeçmek için 'geç', menü için 'menü' yaz.";
+  }
 
-    await createTask(user.wa_id, task);
+  if (user.current_step === "ASK_NOTE") {
+    if (isMenuWord(text)) {
+      await updateUser(user.wa_id, { current_step: "MENU" });
+      return MENU_TEXT;
+    }
+    if (isSkipWord(text)) {
+      await updateUser(user.wa_id, { note: null, current_step: "REDIRECT" });
+      return buildRedirectText();
+    }
+    await updateUser(user.wa_id, { note: text, current_step: "REDIRECT" });
+    return buildRedirectText();
+  }
 
-    return (
-      `Süper. Şehir: ${city}\n` +
-      `Alan: ${getIntentLabel(user.intent)}\n\n` +
-      `İlk görevin:\n${task}\n\n` +
-      "Baştan başlamak için 'reset' yazabilirsin."
-    );
+  if (user.current_step === "REDIRECT") {
+    const num = parseInt(lowered, 10);
+    if (num === 1) {
+      await updateUser(user.wa_id, { current_step: "REFERRAL_ASK" });
+      return `Web sitesi: ${WEBSITE_URL}\n\n`;
+    }
+    if (num === 2) {
+      await updateUser(user.wa_id, { current_step: "REFERRAL_ASK" });
+      return `WhatsApp kanalı: ${WA_CHANNEL_LINK}\n\n`;
+    }
+    if (num === 3) {
+      await updateUser(user.wa_id, { current_step: "REFERRAL_ASK" });
+      return `İnsanla direkt iletişim: ${HUMAN_CONTACT_LINK}\n\n`;
+    }
+    if (num === 4) {
+      await updateUser(user.wa_id, { current_step: "MENU" });
+      return MENU_TEXT;
+    }
+    return "Anlayamadım 🤔\n\n" + buildRedirectText();
+  }
+
+  if (user.current_step === "REFERRAL_ASK") {
+    const num = parseInt(lowered, 10);
+    if (num === 1) {
+      await updateUser(user.wa_id, { funnel_interest: true, current_step: "DONE" });
+      return `Detaylı form linki: ${DETAILED_FORM_LINK}\n\nEn kısa sürede dönüş yapacağız! 🙌`;
+    }
+    if (num === 2 || num === 3) {
+      await updateUser(user.wa_id, { funnel_interest: false, current_step: "DONE" });
+      return "Sorun değil 👍\n\nAna menüye dönmek için 'menü' yaz.";
+    }
+    return "Anlayamadım 🤔\n\n" +
+      "Detaylı form ile para kazanma ve referral fırsatlarına erişmek ister misin?\n" +
+      "1️⃣ Evet, detaylı katılmak istiyorum\n" +
+      "2️⃣ Hayır\n" +
+      "3️⃣ Daha sonra";
   }
 
   if (user.current_step === "DONE") {
-    return (
-      "Kaydını aldım ✅\n\n" +
-      "Baştan başlamak istersen 'reset' yaz.\n" +
-      "Yakında profil tamamlama linkini de göndereceğim."
-    );
+    return "Kaydını aldım ✅\n\nAna menüye dönmek için 'menü' yaz.";
   }
 
-  return "Bir şeyler karıştı. Baştan başlamak için 'reset' yaz.";
+  await updateUser(user.wa_id, { current_step: "WELCOME" });
+  return "Bir şeyler karıştı. Baştan başlıyoruz.\n\n" + MENU_TEXT;
+}
+
+async function handleMenuChoice(user, choice) {
+  if (choice === 1) {
+    await updateUser(user.wa_id, { current_step: "REDIRECT" });
+    return "Hızlı yönlendirme ⚡\n\n" + buildRedirectText();
+  }
+  if (choice === 2) {
+    await updateUser(user.wa_id, { current_step: "ASK_NAME" });
+    return "Kayıt / Profil oluşturma 📝\n\nAdını yaz (örnek: Ahmet Yılmaz).\n\nGeçmek için 'geç', menü için 'menü' yaz.";
+  }
+  if (choice === 3) {
+    await updateUser(user.wa_id, { current_step: "REFERRAL_ASK" });
+    return `Detaylı form ile para kazanma ve referral fırsatlarına erişebilirsin 💰\n\nForm linki: ${DETAILED_FORM_LINK}\n\n`;
+  }
+  if (choice === 4) {
+    await updateUser(user.wa_id, { current_step: "DONE" });
+    return `İnsanla görüşmek için:\n${HUMAN_CONTACT_LINK}\n\nAna menüye dönmek için 'menü' yaz.`;
+  }
+  return MENU_TEXT;
+}
+
+function buildRedirectText() {
+  return "Seni yönlendirelim 🔗\n\n" +
+    "1️⃣ Web sitesi\n" +
+    "2️⃣ WhatsApp kanalı\n" +
+    "3️⃣ İnsanla direkt iletişim\n" +
+    "4️⃣ Ana menüye dön\n\n" +
+    "Seçimini yaz.";
 }
 
 // --------------------------------------------------
