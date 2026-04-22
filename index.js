@@ -114,8 +114,8 @@ const GROUP_LINKS = {
 // --------------------------------------------------
 // HELPERS
 // --------------------------------------------------
-async function sendWhatsAppMessage(to, body) {
-  if (!ACCESS_TOKEN || !PHONE_NUMBER_ID) {
+async function sendWhatsAppMessage(to, body, phoneNumberId = PHONE_NUMBER_ID) {
+  if (!ACCESS_TOKEN || !phoneNumberId) {
     throw new Error(
       "WhatsApp environment variables are missing. Set ACCESS_TOKEN and PHONE_NUMBER_ID before sending messages."
     );
@@ -123,7 +123,7 @@ async function sendWhatsAppMessage(to, body) {
 
   try {
     await axios.post(
-      `https://graph.facebook.com/v19.0/${PHONE_NUMBER_ID}/messages`,
+      `https://graph.facebook.com/v19.0/${phoneNumberId}/messages`,
       {
         messaging_product: "whatsapp",
         to,
@@ -564,17 +564,33 @@ app.get("/webhook", (req, res) => {
 app.post("/webhook", async (req, res) => {
   try {
     const body = req.body;
-    const message = body?.entry?.[0]?.changes?.[0]?.value?.messages?.[0];
+    const value = body?.entry?.[0]?.changes?.[0]?.value;
+    const message = value?.messages?.[0];
+    const status = value?.statuses?.[0];
 
     if (!message) {
+      if (status) {
+        console.log(
+          "Status update:",
+          JSON.stringify({
+            recipient_id: status.recipient_id,
+            status: status.status,
+            timestamp: status.timestamp,
+            conversation: status.conversation?.id,
+            errors: status.errors
+          })
+        );
+      }
       return res.sendStatus(200);
     }
 
     const from = message.from;
     const text = message.text?.body || "";
+    const incomingPhoneNumberId = value?.metadata?.phone_number_id || PHONE_NUMBER_ID;
 
     console.log("Incoming from:", from);
     console.log("Incoming message:", text);
+    console.log("Reply via phone_number_id:", incomingPhoneNumberId);
 
     const user = await getOrCreateUser(from);
     console.log("User loaded, step:", user.current_step);
@@ -582,7 +598,7 @@ app.post("/webhook", async (req, res) => {
     const reply = await buildReply(user, text);
     console.log("Reply built, length:", reply.length);
 
-    await sendWhatsAppMessage(from, reply);
+    await sendWhatsAppMessage(from, reply, incomingPhoneNumberId);
     console.log("Reply sent OK to:", from);
 
     await logMessage(from, text, reply);
