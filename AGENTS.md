@@ -18,7 +18,7 @@ No linter, formatter, or typecheck is configured.
 - Custom env loader (no `dotenv` dependency). Reads `.env` then `.secret` at startup; **first value wins** per key.
 - Required env vars: `VERIFY_TOKEN`, `ACCESS_TOKEN`, `PHONE_NUMBER_ID`
 - Supabase vars: `SUPABASE_URL` (fallbacks: `VITE_SUPABASE_URL`), `SUPABASE_SERVICE_ROLE_KEY` (fallbacks: `SUPABASE_ANON_KEY`, `VITE_SUPABASE_PUBLISHABLE_KEY`)
-- Link vars: `WA_CHANNEL_LINK`, `DETAILED_FORM_LINK`, `HUMAN_CONTACT_LINK` (default: `https://wa.me/491739569429`), `WEBSITE_URL` (default: `https://corteqs.net/`)
+- Link vars: `WA_CHANNEL_LINK`, `DETAILED_FORM_LINK`, `HUMAN_CONTACT_LINK` (default: `https://wa.me/491637084577`), `WEBSITE_URL` (default: `https://corteqs.net/`)
 - `.secret` is **tracked in git** and contains live credentials. Do not add new secrets there — use `.env` (gitignored) instead.
 
 ## Architecture

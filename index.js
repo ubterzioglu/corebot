@@ -23,7 +23,7 @@ const SUPABASE_KEY = firstDefined(
 
 const WA_CHANNEL_LINK = process.env.WA_CHANNEL_LINK || "https://chat.whatsapp.com/PLACEHOLDER";
 const DETAILED_FORM_LINK = process.env.DETAILED_FORM_LINK || "https://corteqs.net/PLACEHOLDER";
-const HUMAN_CONTACT_LINK = process.env.HUMAN_CONTACT_LINK || "https://wa.me/491739569429";
+const HUMAN_CONTACT_LINK = process.env.HUMAN_CONTACT_LINK || "https://wa.me/491637084577";
 const WEBSITE_URL = process.env.WEBSITE_URL || "https://corteqs.net/";
 
 function loadEnvFiles() {
