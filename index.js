@@ -93,6 +93,7 @@ function getSupabaseClient() {
 }
 
 const supabase = getSupabaseClient();
+let submissionsChannel = null;
 
 // --------------------------------------------------
 // WHATSAPP GROUP LINKS CONFIGURATION
@@ -139,9 +140,12 @@ async function sendWhatsAppMessage(to, body, phoneNumberId = PHONE_NUMBER_ID) {
   } catch (error) {
     const metaError = error.response?.data?.error;
 
-    if (metaError?.code === 190 && metaError?.error_subcode === 463) {
+    if (metaError?.code === 190) {
+      const suffix = metaError.error_subcode
+        ? ` Meta subcode: ${metaError.error_subcode}.`
+        : "";
       throw new Error(
-        "WhatsApp access token expired. Generate a new permanent or long-lived Meta access token, update ACCESS_TOKEN, and restart the server."
+        `WhatsApp access token is invalid or expired.${suffix} Generate a new permanent or long-lived Meta access token, update ACCESS_TOKEN, and restart the server.`
       );
     }
 
@@ -542,6 +546,67 @@ async function processFormSubmission(submission) {
   }
 }
 
+function setupFormSubmissionSubscription() {
+  if (!supabase) {
+    console.warn('Supabase client not available - skipping Realtime subscription');
+    return;
+  }
+
+  if (submissionsChannel) {
+    console.log('Realtime subscription already initialized - skipping duplicate setup');
+    return;
+  }
+
+  try {
+    submissionsChannel = supabase
+      .channel('submissions-channel')
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'submissions',
+          filter: 'whatsapp_interest=eq.true'
+        },
+        (payload) => {
+          console.log('New form submission detected:', payload.new.id);
+          processFormSubmission(payload.new);
+        }
+      )
+      .subscribe((status, error) => {
+        if (status === 'SUBSCRIBED') {
+          console.log('Subscribed to submissions table Realtime channel');
+          return;
+        }
+
+        if (status === 'CHANNEL_ERROR') {
+          console.error(
+            'Realtime subscription failed. Check Supabase Realtime is enabled for public.submissions and the configured Supabase key has access.',
+            error || ''
+          );
+          return;
+        }
+
+        if (status === 'TIMED_OUT' || status === 'CLOSED') {
+          console.error('Realtime subscription status:', status, error || '');
+        }
+      });
+  } catch (error) {
+    submissionsChannel = null;
+    console.error('Failed to set up Realtime subscription:', error);
+  }
+}
+
+async function cleanupFormSubmissionSubscription() {
+  if (!supabase || !submissionsChannel) {
+    return;
+  }
+
+  const channel = submissionsChannel;
+  submissionsChannel = null;
+  await supabase.removeChannel(channel);
+}
+
 // --------------------------------------------------
 // WEBHOOK VERIFICATION
 // --------------------------------------------------
@@ -619,48 +684,19 @@ app.get("/", (req, res) => {
 
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
-  
-  // --------------------------------------------------
-  // REALTIME SUBSCRIPTION FOR FORM SUBMISSIONS
-  // --------------------------------------------------
-  if (supabase) {
-    try {
-      const submissionsChannel = supabase
-        .channel('submissions-channel')
-        .on(
-          'postgres_changes',
-          {
-            event: 'INSERT',
-            schema: 'public',
-            table: 'submissions',
-            filter: 'whatsapp_interest=eq.true'
-          },
-          (payload) => {
-            console.log('New form submission detected:', payload.new.id);
-            processFormSubmission(payload.new);
-          }
-        )
-        .subscribe((status) => {
-          if (status === 'SUBSCRIBED') {
-            console.log('Subscribed to submissions table Realtime channel');
-          } else {
-            console.error('Realtime subscription status:', status);
-          }
-        });
-      
-      // Handle channel errors
-      submissionsChannel.on('CHANNEL_ERROR', (error) => {
-        console.error('Realtime channel error:', error);
-      });
-      
-      // Handle broadcast errors  
-      submissionsChannel.on('BROADCAST_ERROR', (error) => {
-        console.error('Realtime broadcast error:', error);
-      });
-    } catch (error) {
-      console.error('Failed to set up Realtime subscription:', error);
-    }
-  } else {
-    console.warn('Supabase client not available - skipping Realtime subscription');
-  }
+  setupFormSubmissionSubscription();
+});
+
+async function shutdown(signal) {
+  console.log(`${signal} received - shutting down`);
+  await cleanupFormSubmissionSubscription();
+  process.exit(0);
+}
+
+process.on('SIGINT', () => {
+  shutdown('SIGINT');
+});
+
+process.on('SIGTERM', () => {
+  shutdown('SIGTERM');
 });

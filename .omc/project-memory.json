@@ -1,6 +1,6 @@
 {
   "version": "1.0.0",
-  "lastScanned": 1776761613385,
+  "lastScanned": 1777207116396,
   "projectRoot": "C:\\temp_private\\corteqs\\corteqs_wabot",
   "techStack": {
     "languages": [
@@ -51,14 +51,14 @@
       "path": "supabase",
       "purpose": null,
       "fileCount": 0,
-      "lastAccessed": 1776761613319,
+      "lastAccessed": 1777207116353,
       "keyFiles": []
     },
     "supabase\\migrations": {
       "path": "supabase\\migrations",
       "purpose": "Database migrations",
       "fileCount": 1,
-      "lastAccessed": 1776761613320,
+      "lastAccessed": 1777207116373,
       "keyFiles": [
         "001_bot_flow_v2.sql"
       ]
@@ -67,45 +67,9 @@
   "hotPaths": [
     {
       "path": "index.js",
-      "accessCount": 6,
-      "lastAccessed": 1776775902256,
-      "type": "file"
-    },
-    {
-      "path": "",
       "accessCount": 2,
-      "lastAccessed": 1776772928623,
+      "lastAccessed": 1777207134899,
       "type": "directory"
-    },
-    {
-      "path": ".env",
-      "accessCount": 2,
-      "lastAccessed": 1776774233792,
-      "type": "file"
-    },
-    {
-      "path": "AGENTS.md",
-      "accessCount": 2,
-      "lastAccessed": 1776775902292,
-      "type": "file"
-    },
-    {
-      "path": "package.json",
-      "accessCount": 2,
-      "lastAccessed": 1776775902339,
-      "type": "file"
-    },
-    {
-      "path": ".secret",
-      "accessCount": 1,
-      "lastAccessed": 1776761658679,
-      "type": "file"
-    },
-    {
-      "path": "supabase\\migrations\\001_bot_flow_v2.sql",
-      "accessCount": 1,
-      "lastAccessed": 1776774251631,
-      "type": "file"
     }
   ],
   "userDirectives": []
