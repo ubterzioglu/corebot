@@ -21,10 +21,10 @@ const SUPABASE_KEY = firstDefined(
   "VITE_SUPABASE_PUBLISHABLE_KEY"
 );
 
-const WA_CHANNEL_LINK = process.env.WA_CHANNEL_LINK || "https://chat.whatsapp.com/PLACEHOLDER";
+const WA_CHANNEL_LINK = process.env.WA_CHANNEL_LINK || "https://chat.whatsapp.com/JDMyCOx0m2w3lqejP7vA6M";
 const DETAILED_FORM_LINK = process.env.DETAILED_FORM_LINK || "https://corteqs.net/PLACEHOLDER";
-const HUMAN_CONTACT_LINK = process.env.HUMAN_CONTACT_LINK || "https://wa.me/491637084577";
-const WEBSITE_URL = process.env.WEBSITE_URL || "https://corteqs.net/";
+const HUMAN_CONTACT_LINK = process.env.HUMAN_CONTACT_LINK || "https://wa.me/905302404995?text=CorteQS%20-%20Bilgi%20almak%20istiyorum!";
+const WEBSITE_URL = process.env.WEBSITE_URL || "https://corteqs.net";
 
 function loadEnvFiles() {
   const envFiles = [".env", ".secret"];
@@ -82,6 +82,10 @@ function firstDefined(...keys) {
 }
 
 function getSupabaseClient() {
+  if (process.env.NODE_ENV === "test") {
+    return null;
+  }
+
   if (!SUPABASE_URL || !SUPABASE_KEY) {
     console.warn(
       "Supabase environment variables are missing. Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY (or SUPABASE_ANON_KEY). Database writes are disabled."
@@ -196,11 +200,14 @@ async function createTask(wa_id, task) {
 }
 
 const MENU_TEXT =
-  "Ne yapmak istiyorsun?\n" +
+  "CorteQS’e Hoş Geldiniz 🚀\n" +
+  "Size nasıl yardımcı olabiliriz?\n" +
   "1️⃣ Hızlı yönlendirme\n" +
   "2️⃣ Kayıt ol / Profil oluştur\n" +
-  "3️⃣ Detaylı form (para kazanma & referral)\n" +
-  "4️⃣ İnsanla görüş\n\nAna menüye dönmek için 'm' yazın.\n\nTürk Diasporası CorteQS'e desteğin için teşekkürler!";
+  "3️⃣ Detaylı başvuru (gelir & referans sistemi)\n" +
+  "4️⃣ Yetkili ile görüşme\n" +
+  "Ana menüye dönmek için “m” yazabilirsiniz.\n" +
+  "Türk diasporasına verdiğiniz destek için teşekkür ederiz.";
 
 const CATEGORY_MAP = [
   { key: "career", label: "İş & Kariyer" },
@@ -211,6 +218,20 @@ const CATEGORY_MAP = [
   { key: "monetization", label: "Referral / Para kazanma" },
   { key: "other", label: "Diğer" }
 ];
+
+const DISCOVERY_SOURCE_MAP = [
+  { key: "whatsapp", label: "WhatsApp" },
+  { key: "instagram", label: "Instagram" },
+  { key: "linkedin", label: "LinkedIn" },
+  { key: "referral", label: "Arkadaş / tavsiye" },
+  { key: "event", label: "Etkinlik" },
+  { key: "google_web", label: "Google / web" },
+  { key: "other", label: "Diğer" }
+];
+
+const REGISTRATION_FOOTER =
+  "Ana menüye dönmek için “m” yazabilirsiniz.\n" +
+  "Opsiyonel alanları geçmek için “geç” yazabilirsiniz.";
 
 function isMenuWord(text) {
   const t = (text || "").toLowerCase().trim();
@@ -248,6 +269,19 @@ function parseCategoryChoice(text) {
   return null;
 }
 
+function parseDiscoverySource(text) {
+  const t = (text || "").toLowerCase().trim();
+  const num = parseInt(t, 10);
+  if (num >= 1 && num <= DISCOVERY_SOURCE_MAP.length) return DISCOVERY_SOURCE_MAP[num - 1].key;
+  for (const source of DISCOVERY_SOURCE_MAP) {
+    if (t.includes(source.key) || t.includes(source.label.toLowerCase())) return source.key;
+  }
+  if (t.includes("arkadaş") || t.includes("arkadas") || t.includes("tavsiye")) return "referral";
+  if (t.includes("etkin")) return "event";
+  if (t.includes("google") || t.includes("web")) return "google_web";
+  return null;
+}
+
 function parseName(text) {
   const parts = (text || "").trim().split(/\s+/);
   if (parts.length === 0 || !parts[0]) return { name: null, surname: null };
@@ -255,22 +289,49 @@ function parseName(text) {
   return { name: parts[0], surname: parts.slice(1).join(" ") };
 }
 
-function parseLocation(text) {
-  const t = (text || "").trim();
-  if (!t) return { country: null, city: null };
-  const parts = t.split(/\s*[-,–—]\s*/);
-  if (parts.length >= 2) {
-    return { country: parts[0].trim(), city: parts.slice(1).join(" ").trim() };
-  }
-  const words = t.split(/\s+/);
-  if (words.length === 1) return { country: null, city: words[0] };
-  return { country: words[0], city: words.slice(1).join(" ") };
+function isValidEmail(text) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test((text || "").trim());
+}
+
+function isValidPhone(text) {
+  return /^\+\d[\d\s().-]{5,}$/.test((text || "").trim());
+}
+
+function isAffirmative(text) {
+  const t = (text || "").toLowerCase().trim();
+  return ["1", "evet", "e", "yes", "onaylıyorum", "onayliyorum", "kabul", "kabul ediyorum"].includes(t);
+}
+
+function isNegative(text) {
+  const t = (text || "").toLowerCase().trim();
+  return ["2", "hayır", "hayir", "h", "no", "istemiyorum", "reddediyorum", "red"].includes(t);
 }
 
 function buildCategoryText() {
-  return "Hangi konuda destek arıyorsun?\n" +
+  return "Kategori / İlgi Alanı\n" +
     CATEGORY_MAP.map((c, i) => `${i + 1}️⃣ ${c.label}`).join("\n") +
     "\n\nİstersen sadece numara yaz.";
+}
+
+function buildDiscoverySourceText() {
+  return "Bizi nereden buldunuz?\n" +
+    DISCOVERY_SOURCE_MAP.map((source, i) => `${i + 1}️⃣ ${source.label}`).join("\n") +
+    "\n\nLütfen numara veya kaynak adını yazın.";
+}
+
+function buildRegistrationIntroText() {
+  return "İlginizi Kaydedin\n" +
+    "🚀 Yakında açılıyoruz! İlk erişim için bilgilerinizi bırakın.\n\n" +
+    "🎯 Yakında: AI Destekli Eşleştirme\n" +
+    "🌍 Yakında: 50+ Şehir Ağı\n\n" +
+    buildCategoryText() +
+    "\n\nAna menüye dönmek için “m” yazabilirsiniz.";
+}
+
+function buildPrivacyConsentText() {
+  return "Kişisel bilgilerimi, CorteQS tarafından tarafıma ulaşılması amacıyla paylaşıyorum. Bilgilerim üçüncü şahıslarla paylaşılmayacaktır.\n\n" +
+    "1️⃣ Onaylıyorum\n" +
+    "2️⃣ Onaylamıyorum";
 }
 
 async function getOrCreateUser(wa_id) {
@@ -283,6 +344,16 @@ async function getOrCreateUser(wa_id) {
       country: null,
       category: null,
       note: null,
+      organization: null,
+      occupation_interest: null,
+      email: null,
+      phone: null,
+      discovery_source: null,
+      referral_code: null,
+      whatsapp_group_interest: null,
+      privacy_consent: null,
+      registration_status: null,
+      registration_completed_at: null,
       funnel_interest: null,
       current_step: "WELCOME"
     };
@@ -320,7 +391,7 @@ async function getOrCreateUser(wa_id) {
   return newUser;
 }
 
-async function updateUser(wa_id, updates) {
+let updateUserImpl = async function updateUserInSupabase(wa_id, updates) {
   if (!supabase) {
     return;
   }
@@ -339,6 +410,14 @@ async function updateUser(wa_id, updates) {
     console.error("wa_users update error:", error);
     throw error;
   }
+};
+
+async function updateUser(wa_id, updates) {
+  return updateUserImpl(wa_id, updates);
+}
+
+function setUpdateUserForTests(updateFn) {
+  updateUserImpl = updateFn;
 }
 
 async function buildReply(user, incomingText) {
@@ -347,7 +426,7 @@ async function buildReply(user, incomingText) {
 
   if (lowered === "reset" || isMenuWord(text)) {
     await updateUser(user.wa_id, { current_step: "MENU" });
-    return "CorteQS'e hoş geldin 🚀\n\n" + MENU_TEXT;
+    return MENU_TEXT;
   }
 
   if (user.current_step === "WELCOME") {
@@ -357,7 +436,7 @@ async function buildReply(user, incomingText) {
       return handleMenuChoice(user, choice);
     }
     await updateUser(user.wa_id, { current_step: "MENU" });
-    return "CorteQS'e hoş geldin 🚀\n\n" + MENU_TEXT + "\n\nAna menüye dönmek için 'm' yazın.\n\nTürk Diasporası CorteQS'e desteğin için teşekkürler!";
+    return MENU_TEXT;
   }
 
   if (user.current_step === "MENU") {
@@ -366,56 +445,122 @@ async function buildReply(user, incomingText) {
     return "Anlayamadım 🤔\n\n" + MENU_TEXT + "\n\nİstersen sadece 1, 2, 3 veya 4 yaz.\n\nAna menüye dönmek için 'm' yazın.\n\nTürk Diasporası CorteQS'e desteğin için teşekkürler!";
   }
 
-  if (user.current_step === "ASK_NAME") {
-    if (isMenuWord(text)) {
-      await updateUser(user.wa_id, { current_step: "MENU" });
-      return MENU_TEXT;
-    }
-    if (isSkipWord(text)) {
-      await updateUser(user.wa_id, { name: null, surname: null, current_step: "ASK_LOCATION" });
-      return "Tamam, geçelim. ⏩\n\nŞehir ve ülke bilgisini yaz (örnek: Almanya - Dortmund).\n\nGeçmek için 'geç', menü için 'm' yazın.\n\nTürk Diasporası CorteQS'e desteğin için teşekkürler!";
-    }
-    const { name, surname } = parseName(text);
-    await updateUser(user.wa_id, { name, surname, current_step: "ASK_LOCATION" });
-    return `Merhaba ${name}! 👋\n\nŞehir ve ülke bilgisini yaz (örnek: Almanya - Dortmund).\n\nGeçmek için 'geç', menü için 'm' yazın.\n\nTürk Diasporası CorteQS'e desteğin için teşekkürler!`;
-  }
-
-  if (user.current_step === "ASK_LOCATION") {
-    if (isMenuWord(text)) {
-      await updateUser(user.wa_id, { current_step: "MENU" });
-      return MENU_TEXT;
-    }
-    if (isSkipWord(text)) {
-      await updateUser(user.wa_id, { country: null, city: null, current_step: "ASK_CATEGORY" });
-      return "Tamam, geçelim. ⏩\n\n" + buildCategoryText() + "\n\nAna menüye dönmek için 'm' yazın.\n\nTürk Diasporası CorteQS'e desteğin için teşekkürler!";
-    }
-    const { country, city } = parseLocation(text);
-    await updateUser(user.wa_id, { country, city, current_step: "ASK_CATEGORY" });
-    return "Süper! 📍\n\n" + buildCategoryText() + "\n\nAna menüye dönmek için 'm' yazın.\n\nTürk Diasporası CorteQS'e desteğin için teşekkürler!";
-  }
-
   if (user.current_step === "ASK_CATEGORY") {
-    if (isMenuWord(text)) {
-      await updateUser(user.wa_id, { current_step: "MENU" });
-      return MENU_TEXT;
-    }
     const catKey = parseCategoryChoice(text);
-    if (!catKey) return "Anlayamadım 🤔\n\n" + buildCategoryText() + "\n\nAna menüye dönmek için 'm' yazın.\n\nTürk Diasporası CorteQS'e desteğin için teşekkürler!";
-    await updateUser(user.wa_id, { category: catKey, current_step: "ASK_NOTE" });
-    return "Notun var mı? 💬\n\nÖrneğin: \"Almanya'da iş bulmak istiyorum\" veya \"Berlin'de networking arıyorum\"\n\nGeçmek için 'geç', menü için 'm' yazın.\n\nTürk Diasporası CorteQS'e desteğin için teşekkürler!";
+    if (!catKey) return "Anlayamadım 🤔\n\n" + buildCategoryText() + "\n\nAna menüye dönmek için “m” yazabilirsiniz.";
+    await updateUser(user.wa_id, {
+      category: catKey,
+      registration_status: "in_progress",
+      current_step: "ASK_FULL_NAME"
+    });
+    return "Ad Soyad\nAdınız Soyadınız\n\n" + REGISTRATION_FOOTER;
   }
 
-  if (user.current_step === "ASK_NOTE") {
-    if (isMenuWord(text)) {
-      await updateUser(user.wa_id, { current_step: "MENU" });
-      return MENU_TEXT;
-    }
+  if (user.current_step === "ASK_FULL_NAME") {
+    if (!text || isSkipWord(text)) return "Ad Soyad zorunludur.\nLütfen adınızı ve soyadınızı yazın.";
+    const { name, surname } = parseName(text);
+    await updateUser(user.wa_id, { name, surname, current_step: "ASK_COUNTRY" });
+    return "Ülke\nÖrnek: Almanya\n\nAna menüye dönmek için “m” yazabilirsiniz.";
+  }
+
+  if (user.current_step === "ASK_COUNTRY") {
+    if (!text || isSkipWord(text)) return "Ülke bilgisi zorunludur.\nÖrnek: Almanya";
+    await updateUser(user.wa_id, { country: text, current_step: "ASK_CITY" });
+    return "Şehir\nÖrnek: Berlin\n\nAna menüye dönmek için “m” yazabilirsiniz.";
+  }
+
+  if (user.current_step === "ASK_CITY") {
+    if (!text || isSkipWord(text)) return "Şehir bilgisi zorunludur.\nÖrnek: Berlin";
+    await updateUser(user.wa_id, { city: text, current_step: "ASK_ORGANIZATION" });
+    return "İşletme / Kuruluş (opsiyonel)\nŞirket veya kuruluş adı\n\n" + REGISTRATION_FOOTER;
+  }
+
+  if (user.current_step === "ASK_ORGANIZATION") {
     if (isSkipWord(text)) {
-      await updateUser(user.wa_id, { note: null, current_step: "REDIRECT" });
-      return buildRedirectText() + "\n\nAna menüye dönmek için 'm' yazın.\n\nTürk Diasporası CorteQS'e desteğin için teşekkürler!";
+      await updateUser(user.wa_id, { organization: null, current_step: "ASK_OCCUPATION_INTEREST" });
+    } else {
+      await updateUser(user.wa_id, { organization: text, current_step: "ASK_OCCUPATION_INTEREST" });
     }
-    await updateUser(user.wa_id, { note: text, current_step: "REDIRECT" });
-    return buildRedirectText() + "\n\nAna menüye dönmek için 'm' yazın.\n\nTürk Diasporası CorteQS'e desteğin için teşekkürler!";
+    return "İştigal / İlgi Sahası\nFaaliyet veya ilgi alanınız\n\nAna menüye dönmek için “m” yazabilirsiniz.";
+  }
+
+  if (user.current_step === "ASK_OCCUPATION_INTEREST") {
+    if (!text || isSkipWord(text)) return "İştigal / İlgi Sahası zorunludur.\nFaaliyet veya ilgi alanınızı yazın.";
+    await updateUser(user.wa_id, { occupation_interest: text, current_step: "ASK_EMAIL" });
+    return "E-posta\nÖrnek: ornek@mail.com\n\nAna menüye dönmek için “m” yazabilirsiniz.";
+  }
+
+  if (user.current_step === "ASK_EMAIL") {
+    if (!isValidEmail(text)) {
+      return "E-posta formatı geçerli görünmüyor.\nÖrnek: ornek@mail.com";
+    }
+    await updateUser(user.wa_id, { email: text, current_step: "ASK_PHONE" });
+    return "Telefon (ülke kodu ile)\nÖrnek: +49 170 1234567\n\n+ ile başlatın, ülke kodu zorunlu.";
+  }
+
+  if (user.current_step === "ASK_PHONE") {
+    if (!isValidPhone(text)) {
+      return "Telefon numarası + ile başlamalı ve ülke kodu içermelidir.\nÖrnek: +49 170 1234567";
+    }
+    await updateUser(user.wa_id, { phone: text, current_step: "ASK_DISCOVERY_SOURCE" });
+    return buildDiscoverySourceText() + "\n\nAna menüye dönmek için “m” yazabilirsiniz.";
+  }
+
+  if (user.current_step === "ASK_DISCOVERY_SOURCE") {
+    const sourceKey = parseDiscoverySource(text);
+    if (!sourceKey) return "Anlayamadım 🤔\n\n" + buildDiscoverySourceText();
+    await updateUser(user.wa_id, { discovery_source: sourceKey, current_step: "ASK_REFERRAL_CODE" });
+    return "Referral Kodu (opsiyonel)\nAdmin / davet kodu\n\nSizi yönlendiren admin veya davet kodunu girebilirsiniz.\n\n" + REGISTRATION_FOOTER;
+  }
+
+  if (user.current_step === "ASK_REFERRAL_CODE") {
+    await updateUser(user.wa_id, {
+      referral_code: isSkipWord(text) ? null : text,
+      current_step: "ASK_DEMANDS"
+    });
+    return "Arz & Talepleriniz (opsiyonel)\nÖrn: İş arıyorum • Araç satıyorum • Etkinlik sponsoru arıyorum • Eleman arıyorum...\n\nDiasporadaki arz ve taleplerinizi serbestçe yazın. Detaylı veri AI eşleşme kalitesini artırır.\n\n" + REGISTRATION_FOOTER;
+  }
+
+  if (user.current_step === "ASK_DEMANDS") {
+    await updateUser(user.wa_id, {
+      note: isSkipWord(text) ? null : text,
+      current_step: "ASK_WHATSAPP_GROUP_INTEREST"
+    });
+    return "💬 Kategori WhatsApp grubuna katılmak istiyorum.\nErken erişim, açılış avantajları ve topluluk duyuruları için davet linki size iletilecek.\n\n1️⃣ Evet, katılmak istiyorum\n2️⃣ Hayır";
+  }
+
+  if (user.current_step === "ASK_WHATSAPP_GROUP_INTEREST") {
+    if (!isAffirmative(text) && !isNegative(text)) {
+      return "Lütfen WhatsApp grubu tercihinizi seçin:\n1️⃣ Evet, katılmak istiyorum\n2️⃣ Hayır";
+    }
+    await updateUser(user.wa_id, {
+      whatsapp_group_interest: isAffirmative(text),
+      current_step: "ASK_PRIVACY_CONSENT"
+    });
+    return buildPrivacyConsentText();
+  }
+
+  if (user.current_step === "ASK_PRIVACY_CONSENT") {
+    if (isAffirmative(text)) {
+      await updateUser(user.wa_id, {
+        privacy_consent: true,
+        registration_status: "completed",
+        registration_completed_at: new Date().toISOString(),
+        current_step: "DONE"
+      });
+      return "Kayıt Bırak / Takip Et →\n\nKaydınızı aldık ✅\n⏳ Yakında! Platform açılır açılmaz size ilk haber vereceğiz. Erken kayıt avantajlarından yararlanın.\n\n✉️ info@corteqs.net\n\nAna menüye dönmek için “m” yazabilirsiniz.";
+    }
+
+    if (isNegative(text)) {
+      await updateUser(user.wa_id, {
+        privacy_consent: false,
+        registration_status: "consent_declined",
+        current_step: "ASK_PRIVACY_CONSENT"
+      });
+      return "Onay olmadan kayıt tamamlanamaz.\n\n" + buildPrivacyConsentText();
+    }
+
+    return "Lütfen kişisel bilgi onayı için seçim yapın:\n\n" + buildPrivacyConsentText();
   }
 
   if (user.current_step === "REDIRECT") {
@@ -436,7 +581,7 @@ async function buildReply(user, incomingText) {
       await updateUser(user.wa_id, { current_step: "MENU" });
       return MENU_TEXT;
     }
-    return "Anlayamadım 🤔\n\n" + buildRedirectText() + "\n\nAna menüye dönmek için 'm' yazın.\n\nTürk Diasporası CorteQS'e desteğin için teşekkürler!";
+    return "Anlayamadım 🤔\n\n" + buildRedirectText();
   }
 
   if (user.current_step === "REFERRAL_ASK") {
@@ -467,11 +612,16 @@ async function buildReply(user, incomingText) {
 async function handleMenuChoice(user, choice) {
   if (choice === 1) {
     await updateUser(user.wa_id, { current_step: "REDIRECT" });
-    return "Hızlı yönlendirme ⚡\n\n" + buildRedirectText() + "\n\nAna menüye dönmek için 'm' yazın.\n\nTürk Diasporası CorteQS'e desteğin için teşekkürler!";
+    return buildRedirectText();
   }
   if (choice === 2) {
-    await updateUser(user.wa_id, { current_step: "ASK_NAME" });
-    return "Kayıt / Profil oluşturma 📝\n\nAdını yaz (örnek: Ahmet Yılmaz).\n\nGeçmek için 'geç', menü için 'm' yazın.\n\nTürk Diasporası CorteQS'e desteğin için teşekkürler!";
+    await updateUser(user.wa_id, {
+      current_step: "ASK_CATEGORY",
+      registration_status: "in_progress",
+      privacy_consent: null,
+      registration_completed_at: null
+    });
+    return buildRegistrationIntroText();
   }
   if (choice === 3) {
     await updateUser(user.wa_id, { current_step: "REFERRAL_ASK" });
@@ -485,12 +635,16 @@ async function handleMenuChoice(user, choice) {
 }
 
 function buildRedirectText() {
-  return "Seni yönlendirelim 🔗\n\n" +
-    "1️⃣ Web sitesi\n" +
-    "2️⃣ WhatsApp kanalı\n" +
-    "3️⃣ İnsanla direkt iletişim\n" +
-    "4️⃣ Ana menüye dön\n\n" +
-    "Seçimini yaz.\n\nAna menüye dönmek için 'm' yazın.\n\nTürk Diasporası CorteQS'e desteğin için teşekkürler!";
+  return "Hızlı Yönlendirme ⚡\n" +
+    "Sizi ilgili kanallara yönlendirelim:\n" +
+    "🌐 Web sitesi\n" +
+    `${WEBSITE_URL}\n` +
+    "📲 WhatsApp kanalı\n" +
+    `${WA_CHANNEL_LINK}\n` +
+    "💬 İnsanla direkt iletişim\n" +
+    `${HUMAN_CONTACT_LINK}\n\n` +
+    "Ana menüye dönmek için “m” yazabilirsiniz.\n\n" +
+    "Türk diasporasına verdiğiniz destek için teşekkür ederiz.";
 }
 
 // --------------------------------------------------
@@ -682,10 +836,20 @@ app.get("/", (req, res) => {
   res.send("WhatsApp bot is running");
 });
 
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-  setupFormSubmissionSubscription();
-});
+if (require.main === module) {
+  app.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
+    setupFormSubmissionSubscription();
+  });
+
+  process.on('SIGINT', () => {
+    shutdown('SIGINT');
+  });
+
+  process.on('SIGTERM', () => {
+    shutdown('SIGTERM');
+  });
+}
 
 async function shutdown(signal) {
   console.log(`${signal} received - shutting down`);
@@ -693,10 +857,13 @@ async function shutdown(signal) {
   process.exit(0);
 }
 
-process.on('SIGINT', () => {
-  shutdown('SIGINT');
-});
-
-process.on('SIGTERM', () => {
-  shutdown('SIGTERM');
-});
+module.exports = {
+  buildReply,
+  buildCategoryText,
+  buildDiscoverySourceText,
+  parseCategoryChoice,
+  parseDiscoverySource,
+  isValidEmail,
+  isValidPhone,
+  setUpdateUserForTests
+};
