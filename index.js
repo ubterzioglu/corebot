@@ -420,6 +420,47 @@ function setUpdateUserForTests(updateFn) {
   updateUserImpl = updateFn;
 }
 
+async function createSubmission(user) {
+  if (!supabase) return;
+
+  const submission = {
+    form_type: "whatsapp_bot",
+    category: user.category,
+    fullname: [user.name, user.surname].filter(Boolean).join(" ") || "Belirtilmedi",
+    country: user.country || "Belirtilmedi",
+    city: user.city || "Belirtilmedi",
+    business: user.organization || null,
+    field: user.occupation_interest || "Belirtilmedi",
+    email: user.email,
+    phone: user.phone || user.wa_id,
+    description: null,
+    referral_source: user.discovery_source || null,
+    referral_code: user.referral_code || null,
+    offers_needs: user.note || null,
+    whatsapp_interest: !!user.whatsapp_group_interest,
+    consent: true,
+    status: "new",
+    documents: [],
+    contact_phone_reached: false,
+    contact_whatsapp_reached: false,
+    contact_instagram_reached: false,
+    contact_email_reached: false,
+  };
+
+  const { data, error } = await supabase
+    .from("submissions")
+    .insert(submission)
+    .select()
+    .single();
+
+  if (error) {
+    console.error("submissions insert error:", error);
+    throw error;
+  }
+
+  return data;
+}
+
 async function buildReply(user, incomingText) {
   const text = (incomingText || "").trim();
   const lowered = text.toLowerCase();
@@ -542,13 +583,14 @@ async function buildReply(user, incomingText) {
 
   if (user.current_step === "ASK_PRIVACY_CONSENT") {
     if (isAffirmative(text)) {
+      await createSubmission(user);
       await updateUser(user.wa_id, {
         privacy_consent: true,
         registration_status: "completed",
         registration_completed_at: new Date().toISOString(),
         current_step: "DONE"
       });
-      return "Kayıt Bırak / Takip Et →\n\nKaydınızı aldık ✅\n⏳ Yakında! Platform açılır açılmaz size ilk haber vereceğiz. Erken kayıt avantajlarından yararlanın.\n\n✉️ info@corteqs.net\n\nAna menüye dönmek için “m” yazabilirsiniz.";
+      return "Kayıt Bırak / Takip Et →\n\nKaydınızı aldık ✅\n⏳ Yakında! Platform açılır açılmaz size ilk haber vereceğiz. Erken kayıt avantajlarından yararlanın.\n\n✉️ info@corteqs.net\n\nAna menüye dönmek için "m" yazabilirsiniz.";
     }
 
     if (isNegative(text)) {
@@ -652,7 +694,11 @@ function buildRedirectText() {
 // --------------------------------------------------
 async function processFormSubmission(submission) {
   try {
-    // Validate submission data
+    if (submission.form_type === "whatsapp_bot") {
+      console.log("Skipping bot-originated submission:", submission.id);
+      return;
+    }
+
     if (!submission.phone || !submission.whatsapp_interest || submission.status !== 'new') {
       console.log('Skipping submission - invalid data or already processed:', submission.id);
       return;
@@ -865,5 +911,6 @@ module.exports = {
   parseDiscoverySource,
   isValidEmail,
   isValidPhone,
-  setUpdateUserForTests
+  setUpdateUserForTests,
+  createSubmission
 };
