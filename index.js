@@ -25,6 +25,9 @@ const WA_CHANNEL_LINK = process.env.WA_CHANNEL_LINK || "https://chat.whatsapp.co
 const DETAILED_FORM_LINK = process.env.DETAILED_FORM_LINK || "https://corteqs.net/PLACEHOLDER";
 const HUMAN_CONTACT_LINK = process.env.HUMAN_CONTACT_LINK || "https://wa.me/905302404995?text=CorteQS%20-%20Bilgi%20almak%20istiyorum!";
 const WEBSITE_URL = process.env.WEBSITE_URL || "https://corteqs.net";
+const RAG_UNAVAILABLE_TEXT =
+  "Şu anda bilgi sistemine bağlanamıyorum. Lütfen daha sonra tekrar deneyin.";
+const RAG_NO_ANSWER_TEXT = "Bu konuda net bilgi bulamadım.";
 
 function loadEnvFiles() {
   const envFiles = [".env", ".secret"];
@@ -199,6 +202,38 @@ async function createTask(wa_id, task) {
   }
 }
 
+async function askRag(question) {
+  const ragApiUrl = process.env.RAG_API_URL;
+
+  if (!ragApiUrl) {
+    return RAG_UNAVAILABLE_TEXT;
+  }
+
+  try {
+    const response = await fetch(ragApiUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(process.env.RAG_API_SECRET
+          ? { Authorization: `Bearer ${process.env.RAG_API_SECRET}` }
+          : {})
+      },
+      body: JSON.stringify({ question })
+    });
+
+    if (!response.ok) {
+      console.error(`RAG API returned ${response.status} ${response.statusText}`);
+      return RAG_UNAVAILABLE_TEXT;
+    }
+
+    const data = await response.json();
+    return data.answer || RAG_NO_ANSWER_TEXT;
+  } catch (error) {
+    console.error("RAG request error:", error.message || error);
+    return RAG_UNAVAILABLE_TEXT;
+  }
+}
+
 const MENU_TEXT =
   "CorteQS’e Hoş Geldiniz 🚀\n" +
   "Size nasıl yardımcı olabiliriz?\n" +
@@ -332,6 +367,14 @@ function buildPrivacyConsentText() {
   return "Kişisel bilgilerimi, CorteQS tarafından tarafıma ulaşılması amacıyla paylaşıyorum. Bilgilerim üçüncü şahıslarla paylaşılmayacaktır.\n\n" +
     "1️⃣ Onaylıyorum\n" +
     "2️⃣ Onaylamıyorum";
+}
+
+function buildRagMenuFallbackReply(answer) {
+  return `${answer}\n\nİstersen sadece 1, 2, 3 veya 4 yaz.\nAna menüye dönmek için 'm' yazın.`;
+}
+
+function buildRagDoneReply(answer) {
+  return `${answer}\n\nAna menüye dönmek için 'm' yazın.`;
 }
 
 async function getOrCreateUser(wa_id) {
@@ -476,14 +519,20 @@ async function buildReply(user, incomingText) {
       await updateUser(user.wa_id, { current_step: "MENU" });
       return handleMenuChoice(user, choice);
     }
-    await updateUser(user.wa_id, { current_step: "MENU" });
-    return MENU_TEXT;
+    if (!text) {
+      await updateUser(user.wa_id, { current_step: "MENU" });
+      return MENU_TEXT;
+    }
+    return buildRagMenuFallbackReply(await askRag(text));
   }
 
   if (user.current_step === "MENU") {
     const choice = parseMenuChoice(text);
     if (choice) return handleMenuChoice(user, choice);
-    return "Anlayamadım 🤔\n\n" + MENU_TEXT + "\n\nİstersen sadece 1, 2, 3 veya 4 yaz.\n\nAna menüye dönmek için 'm' yazın.\n\nTürk Diasporası CorteQS'e desteğin için teşekkürler!";
+    if (!text) {
+      return "Anlayamadım 🤔\n\n" + MENU_TEXT + "\n\nİstersen sadece 1, 2, 3 veya 4 yaz.\n\nAna menüye dönmek için 'm' yazın.\n\nTürk Diasporası CorteQS'e desteğin için teşekkürler!";
+    }
+    return buildRagMenuFallbackReply(await askRag(text));
   }
 
   if (user.current_step === "ASK_CATEGORY") {
@@ -590,7 +639,7 @@ async function buildReply(user, incomingText) {
         registration_completed_at: new Date().toISOString(),
         current_step: "DONE"
       });
-      return "Kayıt Bırak / Takip Et →\n\nKaydınızı aldık ✅\n⏳ Yakında! Platform açılır açılmaz size ilk haber vereceğiz. Erken kayıt avantajlarından yararlanın.\n\n✉️ info@corteqs.net\n\nAna menüye dönmek için "m" yazabilirsiniz.";
+      return "Kayıt Bırak / Takip Et →\n\nKaydınızı aldık ✅\n⏳ Yakında! Platform açılır açılmaz size ilk haber vereceğiz. Erken kayıt avantajlarından yararlanın.\n\n✉️ info@corteqs.net\n\nAna menüye dönmek için \"m\" yazabilirsiniz.";
     }
 
     if (isNegative(text)) {
@@ -644,7 +693,10 @@ async function buildReply(user, incomingText) {
   }
 
   if (user.current_step === "DONE") {
-    return "Kaydını aldım ✅\n\nAna menüye dönmek için 'm' yazın.\n\nTürk Diasporası CorteQS'e desteğin için teşekkürler!";
+    if (!text) {
+      return "Kaydını aldım ✅\n\nAna menüye dönmek için 'm' yazın.\n\nTürk Diasporası CorteQS'e desteğin için teşekkürler!";
+    }
+    return buildRagDoneReply(await askRag(text));
   }
 
   await updateUser(user.wa_id, { current_step: "WELCOME" });
@@ -904,6 +956,7 @@ async function shutdown(signal) {
 }
 
 module.exports = {
+  askRag,
   buildReply,
   buildCategoryText,
   buildDiscoverySourceText,
