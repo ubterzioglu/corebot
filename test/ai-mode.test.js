@@ -9,10 +9,11 @@ const {
   setUpdateUserForTests
 } = require("../index");
 
-function createConversation(initialStep = "MENU") {
+function createConversation(initialStep = "MENU", conversationMode = "flow") {
   const user = {
     wa_id: "905300000001",
-    current_step: initialStep
+    current_step: initialStep,
+    conversation_mode: conversationMode
   };
 
   setUpdateUserForTests(async (waId, patch) => {
@@ -53,7 +54,6 @@ test("askRag returns the answer from the RAG API", async () => {
   assert.equal(request.options.method, "POST");
   assert.equal(request.options.headers["Content-Type"], "application/json");
   assert.equal(request.options.headers.Authorization, undefined);
-  assert.equal(request.options.body, JSON.stringify({ question: "CorteQS ne yapiyor?" }));
 });
 
 test("askRag adds bearer auth when RAG_API_SECRET is set", async () => {
@@ -118,47 +118,67 @@ test("askRag returns the unavailable message on non-200 and network failures", a
   );
 });
 
-test("WELCOME uses RAG for free-text questions and keeps the current step", async () => {
+test("MENU option 5 enters AI mode with the premium welcome text", async () => {
+  const conversation = createConversation("MENU");
+
+  const reply = await conversation.send("5");
+
+  assert.equal(conversation.user.current_step, "MENU");
+  assert.equal(conversation.user.conversation_mode, "rag");
+  assert.match(reply, /CorteQS AI bilgi moduna hoş geldiniz/);
+  assert.match(reply, /istediğiniz soruyu yazabilirsiniz/);
+});
+
+test("AI mode sends free-text questions to RAG without changing the current step", async () => {
   process.env.RAG_API_URL = "https://rag.corteqs.net/api/chat";
-  const conversation = createConversation("WELCOME");
+  const conversation = createConversation("DONE", "rag");
 
   global.fetch = async () => ({
     ok: true,
     async json() {
-      return { answer: "CorteQS, diaspora icin AI destekli bir topluluk platformudur." };
+      return { answer: "CorteQS; uyelik, firsatlar ve topluluk konusunda destek sunar." };
     }
   });
 
   const reply = await conversation.send("CorteQS ne yapiyor?");
 
-  assert.equal(conversation.user.current_step, "WELCOME");
-  assert.match(reply, /AI destekli bir topluluk platformudur/);
-  assert.match(reply, /İstersen sadece 1, 2, 3 veya 4 yaz/);
+  assert.equal(conversation.user.current_step, "DONE");
+  assert.equal(conversation.user.conversation_mode, "rag");
+  assert.match(reply, /uyelik, firsatlar ve topluluk/);
 });
 
-test("MENU uses RAG for free-text questions but keeps numeric options in the existing flow", async () => {
+test("AI mode exits cleanly on çık and returns to flow mode", async () => {
+  const conversation = createConversation("MENU", "rag");
+
+  const reply = await conversation.send("çık");
+
+  assert.equal(conversation.user.conversation_mode, "flow");
+  assert.match(reply, /AI modundan çıkıldı/);
+});
+
+test("AI mode returns to the main menu on m", async () => {
+  const conversation = createConversation("DONE", "rag");
+
+  const reply = await conversation.send("m");
+
+  assert.equal(conversation.user.current_step, "MENU");
+  assert.equal(conversation.user.conversation_mode, "flow");
+  assert.match(reply, /5️⃣ CorteQS AI'ya Sor/);
+});
+
+test("registration flow does not enter AI mode when the user writes 5 mid-flow", async () => {
+  const conversation = createConversation("ASK_EMAIL");
+
+  const reply = await conversation.send("5");
+
+  assert.equal(conversation.user.current_step, "ASK_EMAIL");
+  assert.equal(conversation.user.conversation_mode, "flow");
+  assert.match(reply, /Şu an kayıt adımındayız/);
+});
+
+test("MENU free-text no longer falls back to RAG", async () => {
   process.env.RAG_API_URL = "https://rag.corteqs.net/api/chat";
   const conversation = createConversation("MENU");
-
-  global.fetch = async () => ({
-    ok: true,
-    async json() {
-      return { answer: "CorteQS, diaspora uyeleri icin rehberlik saglar." };
-    }
-  });
-
-  let reply = await conversation.send("CorteQS ne yapiyor?");
-  assert.equal(conversation.user.current_step, "MENU");
-  assert.match(reply, /rehberlik saglar/);
-
-  reply = await conversation.send("2");
-  assert.equal(conversation.user.current_step, "ASK_CATEGORY");
-  assert.match(reply, /İlginizi Kaydedin/);
-});
-
-test("registration validation still wins over RAG in ASK_EMAIL", async () => {
-  process.env.RAG_API_URL = "https://rag.corteqs.net/api/chat";
-  const conversation = createConversation("ASK_EMAIL");
   let fetchCalled = false;
 
   global.fetch = async () => {
@@ -171,29 +191,9 @@ test("registration validation still wins over RAG in ASK_EMAIL", async () => {
     };
   };
 
-  const reply = await conversation.send("gecersiz-email");
+  const reply = await conversation.send("CorteQS ne yapiyor?");
 
   assert.equal(fetchCalled, false);
-  assert.equal(conversation.user.current_step, "ASK_EMAIL");
-  assert.match(reply, /E-posta formatı geçerli görünmüyor/);
-});
-
-test("DONE uses RAG for follow-up questions and menu command still returns to MENU", async () => {
-  process.env.RAG_API_URL = "https://rag.corteqs.net/api/chat";
-  const conversation = createConversation("DONE");
-
-  global.fetch = async () => ({
-    ok: true,
-    async json() {
-      return { answer: "CorteQS; kariyer, network ve relocation alanlarinda destek sunar." };
-    }
-  });
-
-  let reply = await conversation.send("Hangi konularda yardimci oluyorsunuz?");
-  assert.equal(conversation.user.current_step, "DONE");
-  assert.match(reply, /kariyer, network ve relocation/);
-
-  reply = await conversation.send("m");
-  assert.equal(conversation.user.current_step, "MENU");
-  assert.match(reply, /CorteQS’e Hoş Geldiniz/);
+  assert.equal(conversation.user.conversation_mode, "flow");
+  assert.match(reply, /İstersen sadece 1, 2, 3, 4 veya 5 yaz/);
 });

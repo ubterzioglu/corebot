@@ -11,7 +11,8 @@ const {
 function createConversation(initialStep = "MENU") {
   const user = {
     wa_id: "905300000000",
-    current_step: initialStep
+    current_step: initialStep,
+    conversation_mode: "flow"
   };
   const updates = [];
 
@@ -120,5 +121,6 @@ test("menu command returns to the main menu from any registration step", async (
   const reply = await conversation.send("m");
 
   assert.equal(conversation.user.current_step, "MENU");
+  assert.equal(conversation.user.conversation_mode, "flow");
   assert.match(reply, /CorteQS’e Hoş Geldiniz/);
 });

@@ -241,8 +241,20 @@ const MENU_TEXT =
   "2️⃣ Kayıt ol / Profil oluştur\n" +
   "3️⃣ Detaylı başvuru (gelir & referans sistemi)\n" +
   "4️⃣ Yetkili ile görüşme\n" +
+  "5️⃣ CorteQS AI'ya Sor\n" +
   "Ana menüye dönmek için “m” yazabilirsiniz.\n" +
   "Türk diasporasına verdiğiniz destek için teşekkür ederiz.";
+
+const AI_MODE_WELCOME_TEXT =
+  "CorteQS AI bilgi moduna hoş geldiniz.\n" +
+  "Platform, üyelik, fırsatlar ve kullanım hakkında istediğiniz soruyu yazabilirsiniz.\n" +
+  "Ana menüye dönmek için \"m\", bu moddan çıkmak için \"çık\" yazın.";
+
+const AI_MODE_EXIT_TEXT =
+  "AI modundan çıkıldı.\n\nAna menüye dönmek için \"m\" yazın veya menüden bir seçim yapın.";
+
+const AI_MODE_REGISTRATION_GUARD_TEXT =
+  "Şu an kayıt adımındayız. AI soruları için ana menüye dönüp 5'i seçebilirsiniz.";
 
 const CATEGORY_MAP = [
   { key: "career", label: "İş & Kariyer" },
@@ -284,6 +296,21 @@ function parseMenuChoice(text) {
   if (t === "2" || t.includes("kayıt") || t.includes("kayit") || t.includes("profil")) return 2;
   if (t === "3" || t.includes("detaylı") || t.includes("detayli") || t.includes("form") || t.includes("referral") || t.includes("para")) return 3;
   if (t === "4" || t.includes("insan") || t.includes("görüş") || t.includes("gorus")) return 4;
+  if (
+    t === "5" ||
+    t === "ai" ||
+    t === "yapay zeka" ||
+    t === "asistan" ||
+    t === "akıllı yardımcı" ||
+    t === "akilli yardimci" ||
+    t === "corteqs ai" ||
+    t === "corteqs ai'ya sor" ||
+    t === "corteqs hakkında ai'ya sor" ||
+    t === "corteqs hakkinda ai'ya sor" ||
+    t === "soru sor"
+  ) {
+    return 5;
+  }
   return null;
 }
 
@@ -369,12 +396,29 @@ function buildPrivacyConsentText() {
     "2️⃣ Onaylamıyorum";
 }
 
-function buildRagMenuFallbackReply(answer) {
-  return `${answer}\n\nİstersen sadece 1, 2, 3 veya 4 yaz.\nAna menüye dönmek için 'm' yazın.`;
+function isAiExitWord(text) {
+  const t = (text || "").toLowerCase().trim();
+  return t === "çık" || t === "cik" || t === "kapat";
 }
 
-function buildRagDoneReply(answer) {
-  return `${answer}\n\nAna menüye dönmek için 'm' yazın.`;
+function isStructuredFlowStep(step) {
+  return [
+    "ASK_CATEGORY",
+    "ASK_FULL_NAME",
+    "ASK_COUNTRY",
+    "ASK_CITY",
+    "ASK_ORGANIZATION",
+    "ASK_OCCUPATION_INTEREST",
+    "ASK_EMAIL",
+    "ASK_PHONE",
+    "ASK_DISCOVERY_SOURCE",
+    "ASK_REFERRAL_CODE",
+    "ASK_DEMANDS",
+    "ASK_WHATSAPP_GROUP_INTEREST",
+    "ASK_PRIVACY_CONSENT",
+    "REDIRECT",
+    "REFERRAL_ASK"
+  ].includes(step);
 }
 
 async function getOrCreateUser(wa_id) {
@@ -398,7 +442,8 @@ async function getOrCreateUser(wa_id) {
       registration_status: null,
       registration_completed_at: null,
       funnel_interest: null,
-      current_step: "WELCOME"
+      current_step: "WELCOME",
+      conversation_mode: "flow"
     };
   }
 
@@ -421,7 +466,8 @@ async function getOrCreateUser(wa_id) {
     .from("wa_users")
     .insert({
       wa_id,
-      current_step: "WELCOME"
+      current_step: "WELCOME",
+      conversation_mode: "flow"
     })
     .select()
     .single();
@@ -507,10 +553,20 @@ async function createSubmission(user) {
 async function buildReply(user, incomingText) {
   const text = (incomingText || "").trim();
   const lowered = text.toLowerCase();
+  const conversationMode = user.conversation_mode || "flow";
 
   if (lowered === "reset" || isMenuWord(text)) {
-    await updateUser(user.wa_id, { current_step: "MENU" });
+    await updateUser(user.wa_id, { current_step: "MENU", conversation_mode: "flow" });
     return MENU_TEXT;
+  }
+
+  if (conversationMode === "rag") {
+    if (isAiExitWord(text)) {
+      await updateUser(user.wa_id, { conversation_mode: "flow" });
+      return AI_MODE_EXIT_TEXT;
+    }
+
+    return askRag(text);
   }
 
   if (user.current_step === "WELCOME") {
@@ -519,23 +575,18 @@ async function buildReply(user, incomingText) {
       await updateUser(user.wa_id, { current_step: "MENU" });
       return handleMenuChoice(user, choice);
     }
-    if (!text) {
-      await updateUser(user.wa_id, { current_step: "MENU" });
-      return MENU_TEXT;
-    }
-    return buildRagMenuFallbackReply(await askRag(text));
+    await updateUser(user.wa_id, { current_step: "MENU" });
+    return MENU_TEXT;
   }
 
   if (user.current_step === "MENU") {
     const choice = parseMenuChoice(text);
     if (choice) return handleMenuChoice(user, choice);
-    if (!text) {
-      return "Anlayamadım 🤔\n\n" + MENU_TEXT + "\n\nİstersen sadece 1, 2, 3 veya 4 yaz.\n\nAna menüye dönmek için 'm' yazın.\n\nTürk Diasporası CorteQS'e desteğin için teşekkürler!";
-    }
-    return buildRagMenuFallbackReply(await askRag(text));
+    return "Anlayamadım 🤔\n\n" + MENU_TEXT + "\n\nİstersen sadece 1, 2, 3, 4 veya 5 yaz.\n\nAna menüye dönmek için 'm' yazın.\n\nTürk Diasporası CorteQS'e desteğin için teşekkürler!";
   }
 
   if (user.current_step === "ASK_CATEGORY") {
+    if (parseMenuChoice(text) === 5) return AI_MODE_REGISTRATION_GUARD_TEXT;
     const catKey = parseCategoryChoice(text);
     if (!catKey) return "Anlayamadım 🤔\n\n" + buildCategoryText() + "\n\nAna menüye dönmek için “m” yazabilirsiniz.";
     await updateUser(user.wa_id, {
@@ -547,6 +598,7 @@ async function buildReply(user, incomingText) {
   }
 
   if (user.current_step === "ASK_FULL_NAME") {
+    if (parseMenuChoice(text) === 5) return AI_MODE_REGISTRATION_GUARD_TEXT;
     if (!text || isSkipWord(text)) return "Ad Soyad zorunludur.\nLütfen adınızı ve soyadınızı yazın.";
     const { name, surname } = parseName(text);
     await updateUser(user.wa_id, { name, surname, current_step: "ASK_COUNTRY" });
@@ -554,18 +606,21 @@ async function buildReply(user, incomingText) {
   }
 
   if (user.current_step === "ASK_COUNTRY") {
+    if (parseMenuChoice(text) === 5) return AI_MODE_REGISTRATION_GUARD_TEXT;
     if (!text || isSkipWord(text)) return "Ülke bilgisi zorunludur.\nÖrnek: Almanya";
     await updateUser(user.wa_id, { country: text, current_step: "ASK_CITY" });
     return "Şehir\nÖrnek: Berlin\n\nAna menüye dönmek için “m” yazabilirsiniz.";
   }
 
   if (user.current_step === "ASK_CITY") {
+    if (parseMenuChoice(text) === 5) return AI_MODE_REGISTRATION_GUARD_TEXT;
     if (!text || isSkipWord(text)) return "Şehir bilgisi zorunludur.\nÖrnek: Berlin";
     await updateUser(user.wa_id, { city: text, current_step: "ASK_ORGANIZATION" });
     return "İşletme / Kuruluş (opsiyonel)\nŞirket veya kuruluş adı\n\n" + REGISTRATION_FOOTER;
   }
 
   if (user.current_step === "ASK_ORGANIZATION") {
+    if (parseMenuChoice(text) === 5) return AI_MODE_REGISTRATION_GUARD_TEXT;
     if (isSkipWord(text)) {
       await updateUser(user.wa_id, { organization: null, current_step: "ASK_OCCUPATION_INTEREST" });
     } else {
@@ -575,12 +630,14 @@ async function buildReply(user, incomingText) {
   }
 
   if (user.current_step === "ASK_OCCUPATION_INTEREST") {
+    if (parseMenuChoice(text) === 5) return AI_MODE_REGISTRATION_GUARD_TEXT;
     if (!text || isSkipWord(text)) return "İştigal / İlgi Sahası zorunludur.\nFaaliyet veya ilgi alanınızı yazın.";
     await updateUser(user.wa_id, { occupation_interest: text, current_step: "ASK_EMAIL" });
     return "E-posta\nÖrnek: ornek@mail.com\n\nAna menüye dönmek için “m” yazabilirsiniz.";
   }
 
   if (user.current_step === "ASK_EMAIL") {
+    if (parseMenuChoice(text) === 5) return AI_MODE_REGISTRATION_GUARD_TEXT;
     if (!isValidEmail(text)) {
       return "E-posta formatı geçerli görünmüyor.\nÖrnek: ornek@mail.com";
     }
@@ -589,6 +646,7 @@ async function buildReply(user, incomingText) {
   }
 
   if (user.current_step === "ASK_PHONE") {
+    if (parseMenuChoice(text) === 5) return AI_MODE_REGISTRATION_GUARD_TEXT;
     if (!isValidPhone(text)) {
       return "Telefon numarası + ile başlamalı ve ülke kodu içermelidir.\nÖrnek: +49 170 1234567";
     }
@@ -597,6 +655,7 @@ async function buildReply(user, incomingText) {
   }
 
   if (user.current_step === "ASK_DISCOVERY_SOURCE") {
+    if (parseMenuChoice(text) === 5) return AI_MODE_REGISTRATION_GUARD_TEXT;
     const sourceKey = parseDiscoverySource(text);
     if (!sourceKey) return "Anlayamadım 🤔\n\n" + buildDiscoverySourceText();
     await updateUser(user.wa_id, { discovery_source: sourceKey, current_step: "ASK_REFERRAL_CODE" });
@@ -604,6 +663,7 @@ async function buildReply(user, incomingText) {
   }
 
   if (user.current_step === "ASK_REFERRAL_CODE") {
+    if (parseMenuChoice(text) === 5) return AI_MODE_REGISTRATION_GUARD_TEXT;
     await updateUser(user.wa_id, {
       referral_code: isSkipWord(text) ? null : text,
       current_step: "ASK_DEMANDS"
@@ -612,6 +672,7 @@ async function buildReply(user, incomingText) {
   }
 
   if (user.current_step === "ASK_DEMANDS") {
+    if (parseMenuChoice(text) === 5) return AI_MODE_REGISTRATION_GUARD_TEXT;
     await updateUser(user.wa_id, {
       note: isSkipWord(text) ? null : text,
       current_step: "ASK_WHATSAPP_GROUP_INTEREST"
@@ -620,6 +681,7 @@ async function buildReply(user, incomingText) {
   }
 
   if (user.current_step === "ASK_WHATSAPP_GROUP_INTEREST") {
+    if (parseMenuChoice(text) === 5) return AI_MODE_REGISTRATION_GUARD_TEXT;
     if (!isAffirmative(text) && !isNegative(text)) {
       return "Lütfen WhatsApp grubu tercihinizi seçin:\n1️⃣ Evet, katılmak istiyorum\n2️⃣ Hayır";
     }
@@ -631,6 +693,7 @@ async function buildReply(user, incomingText) {
   }
 
   if (user.current_step === "ASK_PRIVACY_CONSENT") {
+    if (parseMenuChoice(text) === 5) return AI_MODE_REGISTRATION_GUARD_TEXT;
     if (isAffirmative(text)) {
       await createSubmission(user);
       await updateUser(user.wa_id, {
@@ -655,6 +718,7 @@ async function buildReply(user, incomingText) {
   }
 
   if (user.current_step === "REDIRECT") {
+    if (parseMenuChoice(text) === 5) return AI_MODE_REGISTRATION_GUARD_TEXT;
     const num = parseInt(lowered, 10);
     if (num === 1) {
       await updateUser(user.wa_id, { current_step: "REFERRAL_ASK" });
@@ -676,6 +740,7 @@ async function buildReply(user, incomingText) {
   }
 
   if (user.current_step === "REFERRAL_ASK") {
+    if (parseMenuChoice(text) === 5) return AI_MODE_REGISTRATION_GUARD_TEXT;
     const num = parseInt(lowered, 10);
     if (num === 1) {
       await updateUser(user.wa_id, { funnel_interest: true, current_step: "DONE" });
@@ -693,10 +758,8 @@ async function buildReply(user, incomingText) {
   }
 
   if (user.current_step === "DONE") {
-    if (!text) {
-      return "Kaydını aldım ✅\n\nAna menüye dönmek için 'm' yazın.\n\nTürk Diasporası CorteQS'e desteğin için teşekkürler!";
-    }
-    return buildRagDoneReply(await askRag(text));
+    if (parseMenuChoice(text) === 5) return handleMenuChoice(user, 5);
+    return "Kaydını aldım ✅\n\nAna menüye dönmek için 'm' yazın.\n\nTürk Diasporası CorteQS'e desteğin için teşekkürler!";
   }
 
   await updateUser(user.wa_id, { current_step: "WELCOME" });
@@ -724,6 +787,14 @@ async function handleMenuChoice(user, choice) {
   if (choice === 4) {
     await updateUser(user.wa_id, { current_step: "DONE" });
     return `İnsanla görüşmek için:\n${HUMAN_CONTACT_LINK}\n\nAna menüye dönmek için 'm' yazın.\n\nTürk Diasporası CorteQS'e desteğin için teşekkürler!`;
+  }
+  if (choice === 5) {
+    const updates = { conversation_mode: "rag" };
+    if (isStructuredFlowStep(user.current_step)) {
+      return AI_MODE_REGISTRATION_GUARD_TEXT;
+    }
+    await updateUser(user.wa_id, updates);
+    return AI_MODE_WELCOME_TEXT;
   }
   return MENU_TEXT;
 }
