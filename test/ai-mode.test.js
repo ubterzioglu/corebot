@@ -195,5 +195,5 @@ test("MENU free-text no longer falls back to RAG", async () => {
 
   assert.equal(fetchCalled, false);
   assert.equal(conversation.user.conversation_mode, "flow");
-  assert.match(reply, /İstersen sadece 1, 2, 3, 4 veya 5 yaz/);
+  assert.match(reply, /İstersen sadece 1, 2, 3, 4, 5 veya 6 yaz/);
 });

@@ -186,6 +186,29 @@ async function logMessage(wa_id, message_text, reply_text) {
   }
 }
 
+async function deliverAndLogMessage({
+  waId,
+  outgoingText,
+  incomingText = null,
+  phoneNumberId = PHONE_NUMBER_ID,
+  send = sendWhatsAppMessage,
+  log = logMessage
+}) {
+  let sendError = null;
+
+  try {
+    await send(waId, outgoingText, phoneNumberId);
+  } catch (error) {
+    sendError = error;
+  }
+
+  await log(waId, incomingText, outgoingText);
+
+  if (sendError) {
+    throw sendError;
+  }
+}
+
 async function createTask(wa_id, task) {
   if (!supabase) {
     return;
@@ -236,14 +259,16 @@ async function askRag(question) {
 
 const MENU_TEXT =
   "CorteQS’e Hoş Geldiniz 🚀\n" +
-  "Size nasıl yardımcı olabiliriz?\n" +
-  "1️⃣ Hızlı yönlendirme\n" +
-  "2️⃣ Kayıt ol / Profil oluştur\n" +
-  "3️⃣ Detaylı başvuru (gelir & referans sistemi)\n" +
-  "4️⃣ Yetkili ile görüşme\n" +
-  "5️⃣ CorteQS AI'ya Sor\n" +
-  "Ana menüye dönmek için “m” yazabilirsiniz.\n" +
-  "Türk diasporasına verdiğiniz destek için teşekkür ederiz.";
+  "Size nasıl yardımcı olabiliriz?\n\n" +
+  "1️⃣ Hızlı yönlendirme\n\n" +
+  "2️⃣ Kayıt ol / Profil oluştur\n\n" +
+  "3️⃣ Detaylı başvuru (gelir & referans sistemi)\n\n" +
+  "4️⃣ Yetkili ile görüşme\n\n" +
+  "5️⃣ CorteQS AI'ya Sor\n\n" +
+  "6️⃣ İstek ve Öneri Bırak\n\n" +
+  "Ana menüye dönmek için “m” yazabilirsiniz.\n\n" +
+  "Türk diasporasına verdiğiniz destek için teşekkür ederiz.\n" +
+  `${WEBSITE_URL}`;
 
 const AI_MODE_WELCOME_TEXT =
   "CorteQS AI bilgi moduna hoş geldiniz.\n" +
@@ -279,6 +304,7 @@ const DISCOVERY_SOURCE_MAP = [
 const REGISTRATION_FOOTER =
   "Ana menüye dönmek için “m” yazabilirsiniz.\n" +
   "Opsiyonel alanları geçmek için “geç” yazabilirsiniz.";
+const REGISTRATION_MAIN_STEP_TOTAL = 6;
 
 function isMenuWord(text) {
   const t = (text || "").toLowerCase().trim();
@@ -311,6 +337,7 @@ function parseMenuChoice(text) {
   ) {
     return 5;
   }
+  if (t === "6" || t.includes("istek") || t.includes("öneri") || t.includes("oneri") || t.includes("feedback")) return 6;
   return null;
 }
 
@@ -372,7 +399,11 @@ function isNegative(text) {
 function buildCategoryText() {
   return "Kategori / İlgi Alanı\n" +
     CATEGORY_MAP.map((c, i) => `${i + 1}️⃣ ${c.label}`).join("\n") +
-    "\n\nİstersen sadece numara yaz.";
+    "\n\nSadece numara yaz.";
+}
+
+function buildRegistrationStepPrefix(stepNumber) {
+  return `${stepNumber}/${REGISTRATION_MAIN_STEP_TOTAL}\n\n`;
 }
 
 function buildDiscoverySourceText() {
@@ -382,18 +413,35 @@ function buildDiscoverySourceText() {
 }
 
 function buildRegistrationIntroText() {
-  return "İlginizi Kaydedin\n" +
+  return buildRegistrationStepPrefix(1) +
+    "Kayıt Menüsüne Hoş Geldin!\n\n" +
     "🚀 Yakında açılıyoruz! İlk erişim için bilgilerinizi bırakın.\n\n" +
     "🎯 Yakında: AI Destekli Eşleştirme\n" +
     "🌍 Yakında: 50+ Şehir Ağı\n\n" +
     buildCategoryText() +
-    "\n\nAna menüye dönmek için “m” yazabilirsiniz.";
+    "\n\nAna menüye dönmek için “m” yazabilirsiniz.\n" +
+    `${WEBSITE_URL}/`;
 }
 
 function buildPrivacyConsentText() {
   return "Kişisel bilgilerimi, CorteQS tarafından tarafıma ulaşılması amacıyla paylaşıyorum. Bilgilerim üçüncü şahıslarla paylaşılmayacaktır.\n\n" +
     "1️⃣ Onaylıyorum\n" +
     "2️⃣ Onaylamıyorum";
+}
+
+function buildSuggestionIntroText() {
+  return "İstek ve Öneri Menüsü\n\n" +
+    "Lütfen istek, öneri veya geri bildiriminizi detaylı şekilde yazın.\n\n" +
+    "Ana menüye dönmek için “m” yazabilirsiniz.\n" +
+    `${WEBSITE_URL}/`;
+}
+
+function buildSuggestionContactPromptText() {
+  return "Teşekkürler 🙌\n\n" +
+    "Sana ulaşabileceğimiz WhatsApp numarası bırakmak ister misin?\n\n" +
+    "1️⃣ Evet\n" +
+    "2️⃣ Hayır\n\n" +
+    "Ana menüye dönmek için “m” yazabilirsiniz.";
 }
 
 function isAiExitWord(text) {
@@ -416,6 +464,9 @@ function isStructuredFlowStep(step) {
     "ASK_DEMANDS",
     "ASK_WHATSAPP_GROUP_INTEREST",
     "ASK_PRIVACY_CONSENT",
+    "ASK_SUGGESTION_MESSAGE",
+    "ASK_SUGGESTION_CONTACT_PERMISSION",
+    "ASK_SUGGESTION_CONTACT_PHONE",
     "REDIRECT",
     "REFERRAL_ASK"
   ].includes(step);
@@ -441,6 +492,7 @@ async function getOrCreateUser(wa_id) {
       privacy_consent: null,
       registration_status: null,
       registration_completed_at: null,
+      active_suggestion_id: null,
       funnel_interest: null,
       current_step: "WELCOME",
       conversation_mode: "flow"
@@ -507,6 +559,72 @@ async function updateUser(wa_id, updates) {
 
 function setUpdateUserForTests(updateFn) {
   updateUserImpl = updateFn;
+}
+
+let createSuggestionImpl = async function createSuggestionInSupabase({
+  wa_id,
+  suggestion_text,
+  contact_opt_in = null,
+  contact_phone = null
+}) {
+  if (!supabase) {
+    return { id: null };
+  }
+
+  const { data, error } = await supabase
+    .from("wa_suggestions")
+    .insert({
+      wa_id,
+      suggestion_text,
+      contact_opt_in,
+      contact_phone
+    })
+    .select()
+    .single();
+
+  if (error) {
+    console.error("wa_suggestions insert error:", error);
+    throw error;
+  }
+
+  return data;
+};
+
+async function createSuggestion(payload) {
+  return createSuggestionImpl(payload);
+}
+
+function setCreateSuggestionForTests(createFn) {
+  createSuggestionImpl = createFn;
+}
+
+let updateSuggestionImpl = async function updateSuggestionInSupabase(id, updates) {
+  if (!supabase || !id) {
+    return;
+  }
+
+  const payload = {
+    ...updates,
+    updated_at: new Date().toISOString()
+  };
+
+  const { error } = await supabase
+    .from("wa_suggestions")
+    .update(payload)
+    .eq("id", id);
+
+  if (error) {
+    console.error("wa_suggestions update error:", error);
+    throw error;
+  }
+};
+
+async function updateSuggestion(id, updates) {
+  return updateSuggestionImpl(id, updates);
+}
+
+function setUpdateSuggestionForTests(updateFn) {
+  updateSuggestionImpl = updateFn;
 }
 
 async function createSubmission(user) {
@@ -582,39 +700,50 @@ async function buildReply(user, incomingText) {
   if (user.current_step === "MENU") {
     const choice = parseMenuChoice(text);
     if (choice) return handleMenuChoice(user, choice);
-    return "Anlayamadım 🤔\n\n" + MENU_TEXT + "\n\nİstersen sadece 1, 2, 3, 4 veya 5 yaz.\n\nAna menüye dönmek için 'm' yazın.\n\nTürk Diasporası CorteQS'e desteğin için teşekkürler!";
+    return "Anlayamadım 🤔\n\n" + MENU_TEXT + "\n\nİstersen sadece 1, 2, 3, 4, 5 veya 6 yaz.\n\nAna menüye dönmek için 'm' yazın.\n\nTürk Diasporası CorteQS'e desteğin için teşekkürler!";
   }
 
   if (user.current_step === "ASK_CATEGORY") {
     if (parseMenuChoice(text) === 5) return AI_MODE_REGISTRATION_GUARD_TEXT;
     const catKey = parseCategoryChoice(text);
-    if (!catKey) return "Anlayamadım 🤔\n\n" + buildCategoryText() + "\n\nAna menüye dönmek için “m” yazabilirsiniz.";
+    if (!catKey) {
+      return "Anlayamadım 🤔\n\n" +
+        buildRegistrationStepPrefix(1) +
+        buildCategoryText() +
+        "\n\nAna menüye dönmek için “m” yazabilirsiniz.";
+    }
     await updateUser(user.wa_id, {
       category: catKey,
       registration_status: "in_progress",
       current_step: "ASK_FULL_NAME"
     });
-    return "Ad Soyad\nAdınız Soyadınız\n\n" + REGISTRATION_FOOTER;
+    return buildRegistrationStepPrefix(2) + "Ad Soyad\nAdınız Soyadınız\n\n" + REGISTRATION_FOOTER;
   }
 
   if (user.current_step === "ASK_FULL_NAME") {
     if (parseMenuChoice(text) === 5) return AI_MODE_REGISTRATION_GUARD_TEXT;
-    if (!text || isSkipWord(text)) return "Ad Soyad zorunludur.\nLütfen adınızı ve soyadınızı yazın.";
+    if (!text || isSkipWord(text)) {
+      return buildRegistrationStepPrefix(2) + "Ad Soyad zorunludur.\nLütfen adınızı ve soyadınızı yazın.";
+    }
     const { name, surname } = parseName(text);
     await updateUser(user.wa_id, { name, surname, current_step: "ASK_COUNTRY" });
-    return "Ülke\nÖrnek: Almanya\n\nAna menüye dönmek için “m” yazabilirsiniz.";
+    return buildRegistrationStepPrefix(3) + "Ülke\nÖrnek: Almanya\n\nAna menüye dönmek için “m” yazabilirsiniz.";
   }
 
   if (user.current_step === "ASK_COUNTRY") {
     if (parseMenuChoice(text) === 5) return AI_MODE_REGISTRATION_GUARD_TEXT;
-    if (!text || isSkipWord(text)) return "Ülke bilgisi zorunludur.\nÖrnek: Almanya";
+    if (!text || isSkipWord(text)) {
+      return buildRegistrationStepPrefix(3) + "Ülke bilgisi zorunludur.\nÖrnek: Almanya";
+    }
     await updateUser(user.wa_id, { country: text, current_step: "ASK_CITY" });
-    return "Şehir\nÖrnek: Berlin\n\nAna menüye dönmek için “m” yazabilirsiniz.";
+    return buildRegistrationStepPrefix(4) + "Şehir\nÖrnek: Berlin\n\nAna menüye dönmek için “m” yazabilirsiniz.";
   }
 
   if (user.current_step === "ASK_CITY") {
     if (parseMenuChoice(text) === 5) return AI_MODE_REGISTRATION_GUARD_TEXT;
-    if (!text || isSkipWord(text)) return "Şehir bilgisi zorunludur.\nÖrnek: Berlin";
+    if (!text || isSkipWord(text)) {
+      return buildRegistrationStepPrefix(4) + "Şehir bilgisi zorunludur.\nÖrnek: Berlin";
+    }
     await updateUser(user.wa_id, { city: text, current_step: "ASK_ORGANIZATION" });
     return "İşletme / Kuruluş (opsiyonel)\nŞirket veya kuruluş adı\n\n" + REGISTRATION_FOOTER;
   }
@@ -626,20 +755,22 @@ async function buildReply(user, incomingText) {
     } else {
       await updateUser(user.wa_id, { organization: text, current_step: "ASK_OCCUPATION_INTEREST" });
     }
-    return "İştigal / İlgi Sahası\nFaaliyet veya ilgi alanınız\n\nAna menüye dönmek için “m” yazabilirsiniz.";
+    return buildRegistrationStepPrefix(5) + "İştigal / İlgi Sahası\nFaaliyet veya ilgi alanınız\n\nAna menüye dönmek için “m” yazabilirsiniz.";
   }
 
   if (user.current_step === "ASK_OCCUPATION_INTEREST") {
     if (parseMenuChoice(text) === 5) return AI_MODE_REGISTRATION_GUARD_TEXT;
-    if (!text || isSkipWord(text)) return "İştigal / İlgi Sahası zorunludur.\nFaaliyet veya ilgi alanınızı yazın.";
+    if (!text || isSkipWord(text)) {
+      return buildRegistrationStepPrefix(5) + "İştigal / İlgi Sahası zorunludur.\nFaaliyet veya ilgi alanınızı yazın.";
+    }
     await updateUser(user.wa_id, { occupation_interest: text, current_step: "ASK_EMAIL" });
-    return "E-posta\nÖrnek: ornek@mail.com\n\nAna menüye dönmek için “m” yazabilirsiniz.";
+    return buildRegistrationStepPrefix(6) + "E-posta\nÖrnek: ornek@mail.com\n\nAna menüye dönmek için “m” yazabilirsiniz.";
   }
 
   if (user.current_step === "ASK_EMAIL") {
     if (parseMenuChoice(text) === 5) return AI_MODE_REGISTRATION_GUARD_TEXT;
     if (!isValidEmail(text)) {
-      return "E-posta formatı geçerli görünmüyor.\nÖrnek: ornek@mail.com";
+      return buildRegistrationStepPrefix(6) + "E-posta formatı geçerli görünmüyor.\nÖrnek: ornek@mail.com";
     }
     await updateUser(user.wa_id, { email: text, current_step: "ASK_PHONE" });
     return "Telefon (ülke kodu ile)\nÖrnek: +49 170 1234567\n\n+ ile başlatın, ülke kodu zorunlu.";
@@ -717,6 +848,61 @@ async function buildReply(user, incomingText) {
     return "Lütfen kişisel bilgi onayı için seçim yapın:\n\n" + buildPrivacyConsentText();
   }
 
+  if (user.current_step === "ASK_SUGGESTION_MESSAGE") {
+    if (!text) {
+      return "Lütfen istek veya önerinizi detaylı şekilde yazın.\n\nAna menüye dönmek için “m” yazabilirsiniz.";
+    }
+
+    const suggestion = await createSuggestion({
+      wa_id: user.wa_id,
+      suggestion_text: text
+    });
+
+    await updateUser(user.wa_id, {
+      active_suggestion_id: suggestion?.id || null,
+      current_step: "ASK_SUGGESTION_CONTACT_PERMISSION"
+    });
+
+    return buildSuggestionContactPromptText();
+  }
+
+  if (user.current_step === "ASK_SUGGESTION_CONTACT_PERMISSION") {
+    if (!isAffirmative(text) && !isNegative(text)) {
+      return "Lütfen bir seçim yapın:\n\n" + buildSuggestionContactPromptText();
+    }
+
+    if (isAffirmative(text)) {
+      await updateSuggestion(user.active_suggestion_id, { contact_opt_in: true });
+      await updateUser(user.wa_id, { current_step: "ASK_SUGGESTION_CONTACT_PHONE" });
+      return "WhatsApp numaranızı ülke kodu ile yazın.\nÖrnek: +49 170 1234567\n\nAna menüye dönmek için “m” yazabilirsiniz.";
+    }
+
+    await updateSuggestion(user.active_suggestion_id, { contact_opt_in: false });
+    await updateUser(user.wa_id, {
+      active_suggestion_id: null,
+      current_step: "DONE"
+    });
+    return "Teşekkürler, istek ve önerinizi kaydettik ✅\n\nAna menüye dönmek için “m” yazabilirsiniz.\n" +
+      `${WEBSITE_URL}/`;
+  }
+
+  if (user.current_step === "ASK_SUGGESTION_CONTACT_PHONE") {
+    if (!isValidPhone(text)) {
+      return "Telefon numarası + ile başlamalı ve ülke kodu içermelidir.\nÖrnek: +49 170 1234567";
+    }
+
+    await updateSuggestion(user.active_suggestion_id, {
+      contact_opt_in: true,
+      contact_phone: text
+    });
+    await updateUser(user.wa_id, {
+      active_suggestion_id: null,
+      current_step: "DONE"
+    });
+    return "Teşekkürler, istek ve önerinizi kaydettik ✅\n\nSize bu numara üzerinden ulaşabiliriz: " +
+      `${text}\n\nAna menüye dönmek için “m” yazabilirsiniz.\n${WEBSITE_URL}/`;
+  }
+
   if (user.current_step === "REDIRECT") {
     if (parseMenuChoice(text) === 5) return AI_MODE_REGISTRATION_GUARD_TEXT;
     const num = parseInt(lowered, 10);
@@ -758,7 +944,8 @@ async function buildReply(user, incomingText) {
   }
 
   if (user.current_step === "DONE") {
-    if (parseMenuChoice(text) === 5) return handleMenuChoice(user, 5);
+    const choice = parseMenuChoice(text);
+    if (choice) return handleMenuChoice(user, choice);
     return "Kaydını aldım ✅\n\nAna menüye dönmek için 'm' yazın.\n\nTürk Diasporası CorteQS'e desteğin için teşekkürler!";
   }
 
@@ -786,7 +973,7 @@ async function handleMenuChoice(user, choice) {
   }
   if (choice === 4) {
     await updateUser(user.wa_id, { current_step: "DONE" });
-    return `İnsanla görüşmek için:\n${HUMAN_CONTACT_LINK}\n\nAna menüye dönmek için 'm' yazın.\n\nTürk Diasporası CorteQS'e desteğin için teşekkürler!`;
+    return `Yetkili ile görüşmek için:\n${HUMAN_CONTACT_LINK}\n\nAna menüye dönmek için 'm' yazın.\n\nTürk Diasporası CorteQS'e desteğin için teşekkürler!\n${WEBSITE_URL}`;
   }
   if (choice === 5) {
     const updates = { conversation_mode: "rag" };
@@ -796,20 +983,28 @@ async function handleMenuChoice(user, choice) {
     await updateUser(user.wa_id, updates);
     return AI_MODE_WELCOME_TEXT;
   }
+  if (choice === 6) {
+    await updateUser(user.wa_id, {
+      active_suggestion_id: null,
+      current_step: "ASK_SUGGESTION_MESSAGE"
+    });
+    return buildSuggestionIntroText();
+  }
   return MENU_TEXT;
 }
 
 function buildRedirectText() {
-  return "Hızlı Yönlendirme ⚡\n" +
-    "Sizi ilgili kanallara yönlendirelim:\n" +
+  return "Hızlı Yönlendirme ⚡\n\n" +
+    "Sizi ilgili kanallara yönlendirelim:\n\n" +
     "🌐 Web sitesi\n" +
-    `${WEBSITE_URL}\n` +
+    `${WEBSITE_URL}\n\n` +
     "📲 WhatsApp kanalı\n" +
-    `${WA_CHANNEL_LINK}\n` +
-    "💬 İnsanla direkt iletişim\n" +
+    `${WA_CHANNEL_LINK}\n\n` +
+    "💬 Yetkili ile direkt iletişim\n" +
     `${HUMAN_CONTACT_LINK}\n\n` +
     "Ana menüye dönmek için “m” yazabilirsiniz.\n\n" +
-    "Türk diasporasına verdiğiniz destek için teşekkür ederiz.";
+    "Türk diasporasına verdiğiniz destek için teşekkür ederiz.\n" +
+    `${WEBSITE_URL}/`;
 }
 
 // --------------------------------------------------
@@ -847,7 +1042,10 @@ async function processFormSubmission(submission) {
     console.log(`Processing submission ${submission.id} for ${submission.phone}`);
     
     // Send WhatsApp message
-    await sendWhatsAppMessage(submission.phone, welcomeMessage);
+    await deliverAndLogMessage({
+      waId: submission.phone,
+      outgoingText: welcomeMessage
+    });
     
     // Update submission status to prevent reprocessing
     if (supabase) {
@@ -986,10 +1184,13 @@ app.post("/webhook", async (req, res) => {
     const reply = await buildReply(user, text);
     console.log("Reply built, length:", reply.length);
 
-    await sendWhatsAppMessage(from, reply, incomingPhoneNumberId);
+    await deliverAndLogMessage({
+      waId: from,
+      incomingText: text,
+      outgoingText: reply,
+      phoneNumberId: incomingPhoneNumberId
+    });
     console.log("Reply sent OK to:", from);
-
-    await logMessage(from, text, reply);
 
     return res.sendStatus(200);
   } catch (error) {
@@ -1035,6 +1236,10 @@ module.exports = {
   parseDiscoverySource,
   isValidEmail,
   isValidPhone,
+  createSuggestion,
+  deliverAndLogMessage,
+  setCreateSuggestionForTests,
+  setUpdateSuggestionForTests,
   setUpdateUserForTests,
   createSubmission
 };

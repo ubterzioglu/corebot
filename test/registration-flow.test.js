@@ -5,6 +5,8 @@ const test = require("node:test");
 
 const {
   buildReply,
+  setCreateSuggestionForTests,
+  setUpdateSuggestionForTests,
   setUpdateUserForTests
 } = require("../index");
 
@@ -34,7 +36,7 @@ test("menu 2 collects the detailed registration flow and completes with consent"
 
   let reply = await conversation.send("2");
   assert.equal(conversation.user.current_step, "ASK_CATEGORY");
-  assert.match(reply, /İlginizi Kaydedin/);
+  assert.match(reply, /Kayıt Menüsüne Hoş Geldin/);
 
   reply = await conversation.send("1");
   assert.equal(conversation.user.category, "career");
@@ -123,4 +125,66 @@ test("menu command returns to the main menu from any registration step", async (
   assert.equal(conversation.user.current_step, "MENU");
   assert.equal(conversation.user.conversation_mode, "flow");
   assert.match(reply, /CorteQS’e Hoş Geldiniz/);
+});
+
+test("menu 6 stores a suggestion without contact number", async () => {
+  const conversation = createConversation();
+  const createdSuggestions = [];
+  const updatedSuggestions = [];
+
+  setCreateSuggestionForTests(async (payload) => {
+    createdSuggestions.push(payload);
+    return { id: 42 };
+  });
+
+  setUpdateSuggestionForTests(async (id, updates) => {
+    updatedSuggestions.push({ id, updates });
+  });
+
+  let reply = await conversation.send("6");
+  assert.equal(conversation.user.current_step, "ASK_SUGGESTION_MESSAGE");
+  assert.match(reply, /İstek ve Öneri Menüsü/);
+
+  reply = await conversation.send("Topluluk etkinlikleri için şehir bazlı filtre eklenmeli.");
+  assert.equal(conversation.user.current_step, "ASK_SUGGESTION_CONTACT_PERMISSION");
+  assert.equal(conversation.user.active_suggestion_id, 42);
+  assert.equal(createdSuggestions[0].suggestion_text, "Topluluk etkinlikleri için şehir bazlı filtre eklenmeli.");
+  assert.match(reply, /WhatsApp numarası bırakmak ister misin/);
+
+  reply = await conversation.send("2");
+  assert.equal(conversation.user.current_step, "DONE");
+  assert.equal(conversation.user.active_suggestion_id, null);
+  assert.deepEqual(updatedSuggestions, [
+    { id: 42, updates: { contact_opt_in: false } }
+  ]);
+  assert.match(reply, /istek ve önerinizi kaydettik/i);
+});
+
+test("menu 6 asks for a valid WhatsApp number when contact is requested", async () => {
+  const conversation = createConversation("ASK_SUGGESTION_CONTACT_PERMISSION");
+  const updatedSuggestions = [];
+
+  conversation.user.active_suggestion_id = 77;
+
+  setUpdateSuggestionForTests(async (id, updates) => {
+    updatedSuggestions.push({ id, updates });
+  });
+
+  let reply = await conversation.send("1");
+  assert.equal(conversation.user.current_step, "ASK_SUGGESTION_CONTACT_PHONE");
+  assert.deepEqual(updatedSuggestions[0], { id: 77, updates: { contact_opt_in: true } });
+  assert.match(reply, /WhatsApp numaranızı ülke kodu ile yazın/);
+
+  reply = await conversation.send("0530 111 22 33");
+  assert.equal(conversation.user.current_step, "ASK_SUGGESTION_CONTACT_PHONE");
+  assert.match(reply, /Telefon numarası \+ ile başlamalı/);
+
+  reply = await conversation.send("+90 530 111 22 33");
+  assert.equal(conversation.user.current_step, "DONE");
+  assert.equal(conversation.user.active_suggestion_id, null);
+  assert.deepEqual(updatedSuggestions[1], {
+    id: 77,
+    updates: { contact_opt_in: true, contact_phone: "+90 530 111 22 33" }
+  });
+  assert.match(reply, /\+90 530 111 22 33/);
 });
