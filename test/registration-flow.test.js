@@ -127,7 +127,7 @@ test("menu command returns to the main menu from any registration step", async (
   assert.match(reply, /CorteQS’e Hoş Geldiniz/);
 });
 
-test("menu 6 stores a suggestion without contact number", async () => {
+test("menu 5 stores a suggestion without contact number", async () => {
   const conversation = createConversation();
   const createdSuggestions = [];
   const updatedSuggestions = [];
@@ -141,7 +141,7 @@ test("menu 6 stores a suggestion without contact number", async () => {
     updatedSuggestions.push({ id, updates });
   });
 
-  let reply = await conversation.send("6");
+  let reply = await conversation.send("5");
   assert.equal(conversation.user.current_step, "ASK_SUGGESTION_MESSAGE");
   assert.match(reply, /İstek ve Öneri Menüsü/);
 
@@ -160,7 +160,7 @@ test("menu 6 stores a suggestion without contact number", async () => {
   assert.match(reply, /istek ve önerinizi kaydettik/i);
 });
 
-test("menu 6 asks for a valid WhatsApp number when contact is requested", async () => {
+test("menu 5 asks for a valid WhatsApp number when contact is requested", async () => {
   const conversation = createConversation("ASK_SUGGESTION_CONTACT_PERMISSION");
   const updatedSuggestions = [];
 
