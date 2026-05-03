@@ -281,6 +281,13 @@ const AI_MODE_EXIT_TEXT =
 const AI_MODE_REGISTRATION_GUARD_TEXT =
   "Şu an kayıt adımındayız. AI soruları için ana menüye dönüp 6'yı seçebilirsiniz.";
 
+const HELLO_INTENT_TEXT =
+  "Merhaba!\n\nAna menüye gitmek için \"m\" yazabilirsiniz.";
+
+const SUPPORT_INTENT_TEXT =
+  "Anlayamadım 🤔\n\n" +
+  "Sizi doğru yere yönlendirebilmem için ana menüye gitmek üzere \"m\" yazabilirsiniz.";
+
 const CATEGORY_MAP = [
   { key: "career", label: "İş & Kariyer" },
   { key: "networking", label: "Networking" },
@@ -314,6 +321,16 @@ function isMenuWord(text) {
 function isSkipWord(text) {
   const t = (text || "").toLowerCase().trim();
   return ["geç", "skip", "sonra", "hayır", "yok", "gerek yok"].includes(t);
+}
+
+function isHelloIntent(text) {
+  const t = (text || "").toLowerCase().trim();
+  return t === "merhaba";
+}
+
+function isSupportIntent(text) {
+  const t = (text || "").toLowerCase().trim();
+  return ["problem", "sorun", "yardım", "destek"].some((keyword) => t.includes(keyword));
 }
 
 function parseMenuChoice(text) {
@@ -470,6 +487,10 @@ function isStructuredFlowStep(step) {
     "REDIRECT",
     "REFERRAL_ASK"
   ].includes(step);
+}
+
+function isFreeTextSafeStep(step) {
+  return ["WELCOME", "MENU", "DONE"].includes(step);
 }
 
 async function getOrCreateUser(wa_id) {
@@ -685,6 +706,16 @@ async function buildReply(user, incomingText) {
     }
 
     return askRag(text);
+  }
+
+  if (isFreeTextSafeStep(user.current_step)) {
+    if (isHelloIntent(text)) {
+      return HELLO_INTENT_TEXT;
+    }
+
+    if (isSupportIntent(text)) {
+      return SUPPORT_INTENT_TEXT;
+    }
   }
 
   if (user.current_step === "WELCOME") {

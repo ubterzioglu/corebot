@@ -127,6 +127,16 @@ test("menu command returns to the main menu from any registration step", async (
   assert.match(reply, /CorteQS’e Hoş Geldiniz/);
 });
 
+test("registration steps ignore hello intent and keep structured validation behavior", async () => {
+  const conversation = createConversation("ASK_FULL_NAME");
+
+  const reply = await conversation.send("merhaba");
+
+  assert.equal(conversation.user.current_step, "ASK_COUNTRY");
+  assert.equal(conversation.user.name, "merhaba");
+  assert.match(reply, /Ülke/);
+});
+
 test("menu 5 stores a suggestion without contact number", async () => {
   const conversation = createConversation();
   const createdSuggestions = [];

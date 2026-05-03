@@ -129,6 +129,39 @@ test("MENU option 6 enters AI mode with the premium welcome text", async () => {
   assert.match(reply, /istediğiniz soruyu yazabilirsiniz/);
 });
 
+test("WELCOME hello intent returns a short greeting with m guidance", async () => {
+  const conversation = createConversation("WELCOME");
+
+  const reply = await conversation.send("merhaba");
+
+  assert.equal(conversation.user.current_step, "WELCOME");
+  assert.equal(conversation.user.conversation_mode, "flow");
+  assert.match(reply, /^Merhaba!/);
+  assert.match(reply, /"m" yazabilirsiniz/);
+});
+
+test("MENU hello intent returns a short greeting with m guidance", async () => {
+  const conversation = createConversation("MENU");
+
+  const reply = await conversation.send("merhaba");
+
+  assert.equal(conversation.user.current_step, "MENU");
+  assert.equal(conversation.user.conversation_mode, "flow");
+  assert.match(reply, /^Merhaba!/);
+  assert.match(reply, /"m" yazabilirsiniz/);
+});
+
+test("MENU support intent returns the friendly misunderstanding fallback", async () => {
+  const conversation = createConversation("MENU");
+
+  const reply = await conversation.send("yardım lazım");
+
+  assert.equal(conversation.user.current_step, "MENU");
+  assert.equal(conversation.user.conversation_mode, "flow");
+  assert.match(reply, /Anlayamadım 🤔/);
+  assert.match(reply, /"m" yazabilirsiniz/);
+});
+
 test("AI mode sends free-text questions to RAG without changing the current step", async () => {
   process.env.RAG_API_URL = "https://rag.corteqs.net/api/chat";
   const conversation = createConversation("DONE", "rag");
@@ -154,6 +187,24 @@ test("AI mode exits cleanly on çık and returns to flow mode", async () => {
 
   assert.equal(conversation.user.conversation_mode, "flow");
   assert.match(reply, /AI modundan çıkıldı/);
+});
+
+test("AI mode does not let hello or support intents override RAG behavior", async () => {
+  process.env.RAG_API_URL = "https://rag.corteqs.net/api/chat";
+  const conversation = createConversation("DONE", "rag");
+
+  global.fetch = async () => ({
+    ok: true,
+    async json() {
+      return { answer: "RAG yaniti" };
+    }
+  });
+
+  const reply = await conversation.send("yardım lazım");
+
+  assert.equal(conversation.user.current_step, "DONE");
+  assert.equal(conversation.user.conversation_mode, "rag");
+  assert.equal(reply, "RAG yaniti");
 });
 
 test("AI mode returns to the main menu on m", async () => {
