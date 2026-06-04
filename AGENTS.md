@@ -2,13 +2,13 @@
 
 ## What this is
 
-Single-file Express 5 WhatsApp Business API webhook bot (`index.js`). Turkish-language conversational onboarding flow. Menu-driven, multi-path flow with 4 routes. CommonJS, no build step.
+Single-file Express 5 WhatsApp Business API webhook bot (`index.js`). Turkish-language conversational routing flow with a separate AI/RAG mode. Menu-driven, multi-path flow. CommonJS, no build step.
 
 ## Commands
 
 ```bash
 npm start          # node index.js (port 3000 by default)
-npm test           # placeholder only, no tests exist
+npm test           # node --test
 ```
 
 No linter, formatter, or typecheck is configured.
@@ -25,16 +25,17 @@ No linter, formatter, or typecheck is configured.
 
 - **Entry point:** `index.js` — everything is in this one file.
 - **Webhook:** `GET /webhook` (verification), `POST /webhook` (incoming messages), `GET /` (health check)
-- **State machine:** User records in Supabase `wa_users` table. Steps: `WELCOME` → `MENU` → then one of 4 routes:
+- **State machine:** User records in Supabase `wa_users` table. Steps: `WELCOME` → `MENU` → then one of these routes:
   - **Route 1 (Hızlı yönlendirme):** `REDIRECT` → `REFERRAL_ASK` → `DONE`
-  - **Route 2 (Kayıt):** `ASK_NAME` → `ASK_LOCATION` → `ASK_CATEGORY` → `ASK_NOTE` → `REDIRECT` → `REFERRAL_ASK` → `DONE`
-  - **Route 3 (Detaylı form):** Shows form link → `REFERRAL_ASK` → `DONE`
-  - **Route 4 (İnsanla görüş):** Shows contact link → `DONE`
-- **Supabase tables:** `wa_users`, `wa_messages`, `wa_tasks`, `submissions`
-- **Category system:** 7 categories: `career`, `networking`, `relocation`, `consulting`, `partnership`, `monetization`, `other`
-- **Global commands:** "menü"/"menu"/"reset" returns to MENU from any step. "geç"/"skip" skips optional steps.
+  - **Route 2 (Detaylı form):** Shows form link → `REFERRAL_ASK` → `DONE`
+  - **Route 3 (İnsanla görüş):** Shows contact link → `DONE`
+  - **Route 4 (İstek/öneri):** `ASK_SUGGESTION_MESSAGE` → `ASK_SUGGESTION_CONTACT_PERMISSION` → optional `ASK_SUGGESTION_CONTACT_PHONE` → `DONE`
+- **AI mode:** `wa_users.conversation_mode = 'rag'` only when the user explicitly selects the AI option from the menu.
+- **Legacy handling:** Removed WhatsApp registration states are bounced back to `MENU` with a migration-safe message.
+- **Supabase tables:** `wa_users`, `wa_messages`, `wa_tasks`, `wa_suggestions`, `submissions`
+- **Global commands:** "menü"/"menu"/"reset" returns to MENU from any step.
 - **Graceful degradation:** If Supabase vars are missing, DB writes are skipped but the bot still responds.
-- **Form submission processing:** Realtime subscription on `submissions` table sends WhatsApp welcome messages for new entries with `whatsapp_interest=true`.
+- **Form submission processing:** Realtime subscription on `submissions` table sends WhatsApp welcome messages for new non-bot entries with `whatsapp_interest=true`.
 
 ## Gotchas
 

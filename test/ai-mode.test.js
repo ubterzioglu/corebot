@@ -118,7 +118,18 @@ test("askRag returns the unavailable message on non-200 and network failures", a
   );
 });
 
-test("MENU option 6 enters AI mode with the premium welcome text", async () => {
+test("MENU option 5 enters AI mode with the premium welcome text", async () => {
+  const conversation = createConversation("MENU");
+
+  const reply = await conversation.send("5");
+
+  assert.equal(conversation.user.current_step, "MENU");
+  assert.equal(conversation.user.conversation_mode, "rag");
+  assert.match(reply, /CorteQS AI bilgi moduna hoş geldiniz/);
+  assert.match(reply, /istediğiniz soruyu yazabilirsiniz/);
+});
+
+test("legacy MENU option 6 still enters AI mode during the transition", async () => {
   const conversation = createConversation("MENU");
 
   const reply = await conversation.send("6");
@@ -126,7 +137,6 @@ test("MENU option 6 enters AI mode with the premium welcome text", async () => {
   assert.equal(conversation.user.current_step, "MENU");
   assert.equal(conversation.user.conversation_mode, "rag");
   assert.match(reply, /CorteQS AI bilgi moduna hoş geldiniz/);
-  assert.match(reply, /istediğiniz soruyu yazabilirsiniz/);
 });
 
 test("WELCOME hello intent returns a short greeting with m guidance", async () => {
@@ -214,17 +224,17 @@ test("AI mode returns to the main menu on m", async () => {
 
   assert.equal(conversation.user.current_step, "MENU");
   assert.equal(conversation.user.conversation_mode, "flow");
-  assert.match(reply, /6️⃣ CorteQS AI'ya Sor/);
+  assert.match(reply, /5️⃣ CorteQS AI'ya Sor/);
 });
 
-test("registration flow does not enter AI mode when the user writes 6 mid-flow", async () => {
-  const conversation = createConversation("ASK_EMAIL");
+test("active structured flows do not enter AI mode when the user writes 5 mid-flow", async () => {
+  const conversation = createConversation("ASK_SUGGESTION_CONTACT_PHONE");
 
-  const reply = await conversation.send("6");
+  const reply = await conversation.send("5");
 
-  assert.equal(conversation.user.current_step, "ASK_EMAIL");
+  assert.equal(conversation.user.current_step, "ASK_SUGGESTION_CONTACT_PHONE");
   assert.equal(conversation.user.conversation_mode, "flow");
-  assert.match(reply, /Şu an kayıt adımındayız/);
+  assert.match(reply, /Şu an aktif bir akıştayız/);
 });
 
 test("MENU free-text no longer falls back to RAG", async () => {
@@ -246,5 +256,5 @@ test("MENU free-text no longer falls back to RAG", async () => {
 
   assert.equal(fetchCalled, false);
   assert.equal(conversation.user.conversation_mode, "flow");
-  assert.match(reply, /İstersen sadece 1, 2, 3, 4, 5 veya 6 yaz/);
+  assert.match(reply, /İstersen sadece 1, 2, 3, 4 veya 5 yaz/);
 });

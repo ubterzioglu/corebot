@@ -31,94 +31,38 @@ function createConversation(initialStep = "MENU") {
   };
 }
 
-test("menu 2 collects the detailed registration flow and completes with consent", async () => {
+test("menu 2 routes users to the detailed form instead of collecting registration data", async () => {
   const conversation = createConversation();
 
-  let reply = await conversation.send("2");
-  assert.equal(conversation.user.current_step, "ASK_CATEGORY");
-  assert.match(reply, /Kayıt Menüsüne Hoş Geldin/);
+  const reply = await conversation.send("2");
 
-  reply = await conversation.send("1");
-  assert.equal(conversation.user.category, "career");
-  assert.equal(conversation.user.current_step, "ASK_FULL_NAME");
-  assert.match(reply, /Ad Soyad/);
-
-  await conversation.send("Ada Lovelace");
-  assert.equal(conversation.user.name, "Ada");
-  assert.equal(conversation.user.surname, "Lovelace");
-  assert.equal(conversation.user.current_step, "ASK_COUNTRY");
-
-  await conversation.send("Almanya");
-  assert.equal(conversation.user.country, "Almanya");
-
-  await conversation.send("Berlin");
-  assert.equal(conversation.user.city, "Berlin");
-
-  await conversation.send("geç");
-  assert.equal(conversation.user.organization, null);
-
-  await conversation.send("AI destekli eşleştirme");
-  assert.equal(conversation.user.occupation_interest, "AI destekli eşleştirme");
-
-  await conversation.send("ada@example.com");
-  assert.equal(conversation.user.email, "ada@example.com");
-
-  await conversation.send("+49 170 1234567");
-  assert.equal(conversation.user.phone, "+49 170 1234567");
-
-  await conversation.send("3");
-  assert.equal(conversation.user.discovery_source, "linkedin");
-
-  await conversation.send("geç");
-  assert.equal(conversation.user.referral_code, null);
-
-  await conversation.send("geç");
-  assert.equal(conversation.user.note, null);
-
-  await conversation.send("1");
-  assert.equal(conversation.user.whatsapp_group_interest, true);
-
-  reply = await conversation.send("onaylıyorum");
-  assert.equal(conversation.user.privacy_consent, true);
-  assert.equal(conversation.user.registration_status, "completed");
-  assert.equal(conversation.user.current_step, "DONE");
-  assert.ok(conversation.user.registration_completed_at);
-  assert.match(reply, /Kaydınızı aldık/);
+  assert.equal(conversation.user.current_step, "REFERRAL_ASK");
+  assert.match(reply, /kayıt akışı kaldırıldı/i);
+  assert.match(reply, /Detaylı başvuru formu:/);
 });
 
-test("invalid email is rejected without advancing the registration step", async () => {
+test("legacy registration steps are retired and bounce the user back to the main menu", async () => {
   const conversation = createConversation("ASK_EMAIL");
 
-  const reply = await conversation.send("bad-email");
+  const reply = await conversation.send("devam");
 
-  assert.equal(conversation.user.current_step, "ASK_EMAIL");
-  assert.equal(conversation.user.email, undefined);
-  assert.match(reply, /E-posta formatı geçerli görünmüyor/);
+  assert.equal(conversation.user.current_step, "MENU");
+  assert.equal(conversation.user.conversation_mode, "flow");
+  assert.match(reply, /kayıt alma akışı kaldırıldı/i);
+  assert.match(reply, /5️⃣ CorteQS AI'ya Sor/);
 });
 
-test("phone must start with plus and include country code", async () => {
-  const conversation = createConversation("ASK_PHONE");
+test("registration keywords now route to the detailed form option", async () => {
+  const conversation = createConversation("MENU");
 
-  const reply = await conversation.send("0170 1234567");
+  const reply = await conversation.send("kayıt olmak istiyorum");
 
-  assert.equal(conversation.user.current_step, "ASK_PHONE");
-  assert.equal(conversation.user.phone, undefined);
-  assert.match(reply, /Telefon numarası \+ ile başlamalı/);
+  assert.equal(conversation.user.current_step, "REFERRAL_ASK");
+  assert.match(reply, /Detaylı başvuru formu:/);
 });
 
-test("declining privacy consent keeps the registration incomplete", async () => {
-  const conversation = createConversation("ASK_PRIVACY_CONSENT");
-
-  const reply = await conversation.send("hayır");
-
-  assert.equal(conversation.user.privacy_consent, false);
-  assert.equal(conversation.user.registration_status, "consent_declined");
-  assert.equal(conversation.user.current_step, "ASK_PRIVACY_CONSENT");
-  assert.match(reply, /Onay olmadan kayıt tamamlanamaz/);
-});
-
-test("menu command returns to the main menu from any registration step", async () => {
-  const conversation = createConversation("ASK_PHONE");
+test("menu command returns to the main menu from the suggestion flow", async () => {
+  const conversation = createConversation("ASK_SUGGESTION_CONTACT_PHONE");
 
   const reply = await conversation.send("m");
 
@@ -127,17 +71,7 @@ test("menu command returns to the main menu from any registration step", async (
   assert.match(reply, /CorteQS’e Hoş Geldiniz/);
 });
 
-test("registration steps ignore hello intent and keep structured validation behavior", async () => {
-  const conversation = createConversation("ASK_FULL_NAME");
-
-  const reply = await conversation.send("merhaba");
-
-  assert.equal(conversation.user.current_step, "ASK_COUNTRY");
-  assert.equal(conversation.user.name, "merhaba");
-  assert.match(reply, /Ülke/);
-});
-
-test("menu 5 stores a suggestion without contact number", async () => {
+test("menu 4 stores a suggestion without contact number", async () => {
   const conversation = createConversation();
   const createdSuggestions = [];
   const updatedSuggestions = [];
@@ -151,7 +85,7 @@ test("menu 5 stores a suggestion without contact number", async () => {
     updatedSuggestions.push({ id, updates });
   });
 
-  let reply = await conversation.send("5");
+  let reply = await conversation.send("4");
   assert.equal(conversation.user.current_step, "ASK_SUGGESTION_MESSAGE");
   assert.match(reply, /İstek ve Öneri Menüsü/);
 
@@ -170,7 +104,7 @@ test("menu 5 stores a suggestion without contact number", async () => {
   assert.match(reply, /istek ve önerinizi kaydettik/i);
 });
 
-test("menu 5 asks for a valid WhatsApp number when contact is requested", async () => {
+test("menu 4 asks for a valid WhatsApp number when contact is requested", async () => {
   const conversation = createConversation("ASK_SUGGESTION_CONTACT_PERMISSION");
   const updatedSuggestions = [];
 
